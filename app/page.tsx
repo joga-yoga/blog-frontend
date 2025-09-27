@@ -38,34 +38,34 @@ export default async function HomePage() {
           const tags = Array.isArray(post.tags) ? (post.tags as string[]) : [];
 
           return (
-          <article
-            key={post.id}
-            className="flex h-full flex-col justify-between rounded-lg border border-gray-200 bg-white p-6 shadow-sm transition hover:shadow-md"
-          >
-            <div className="space-y-3">
-              <div className="text-sm font-medium uppercase tracking-wide text-gray-500">{post.section ?? 'Ogólne'}</div>
-              <h2 className="text-2xl font-semibold text-foreground">
-                <Link href={`/artykuly/${post.slug}`} className="hover:underline">
-                  {post.title}
-                </Link>
-              </h2>
-              {post.lead ? (
-                <p className="line-clamp-3 text-base text-gray-600">{post.lead}</p>
-              ) : null}
-              {tags.length > 0 ? (
-                <ul className="flex flex-wrap gap-2 text-sm text-blue-700">
-                  {tags.slice(0, 4).map((tag: string) => (
-                    <li key={tag} className="rounded-full bg-blue-100 px-3 py-1">
-                      {tag}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-            <footer className="mt-6 text-sm text-gray-500">
-              Opublikowano {formatDate(post.createdAt)}
-            </footer>
-          </article>
+            <article
+              key={post.id}
+              className="flex h-full flex-col justify-between rounded-lg border border-gray-200 bg-white p-6 shadow-sm transition hover:shadow-md"
+            >
+              <div className="space-y-3">
+                <div className="text-sm font-medium uppercase tracking-wide text-gray-500">{post.section ?? 'Ogólne'}</div>
+                <h2 className="text-2xl font-semibold text-slate-900">
+                  <Link href={`/artykuly/${post.slug}`} className="hover:underline">
+                    {post.title}
+                  </Link>
+                </h2>
+                {post.lead ? (
+                  <p className="line-clamp-3 text-base text-gray-600">{post.lead}</p>
+                ) : null}
+                {tags.length > 0 ? (
+                  <ul className="flex flex-wrap gap-2 text-sm text-blue-700">
+                    {tags.slice(0, 4).map((tag: string) => (
+                      <li key={tag} className="rounded-full bg-blue-100 px-3 py-1">
+                        {tag}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+              <footer className="mt-6 text-sm text-gray-500">
+                Opublikowano {formatDate(post.createdAt)}
+              </footer>
+            </article>
           );
         })}
         {posts.length === 0 ? (

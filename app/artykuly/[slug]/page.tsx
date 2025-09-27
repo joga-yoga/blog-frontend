@@ -175,7 +175,7 @@ export default async function ArticlePage({ params }: PageProps) {
 
       <header className="space-y-4">
         <div className="text-sm font-semibold uppercase tracking-wide text-gray-500">{post.section ?? 'Ogólne'}</div>
-        <h1 className="text-4xl font-bold text-foreground sm:text-5xl">{post.title}</h1>
+        <h1 className="text-4xl font-bold text-slate-900 sm:text-5xl">{post.title}</h1>
         {post.lead ? <p className="max-w-3xl text-lg text-gray-600">{post.lead}</p> : null}
         <div className="text-sm text-gray-500">
           Opublikowano {formatDate(post.createdAt)} • Zaktualizowano {formatDate(post.updatedAt)}
@@ -195,13 +195,13 @@ export default async function ArticlePage({ params }: PageProps) {
 
       {faqItems.length ? (
         <section aria-labelledby="faq-heading" className="rounded-lg border border-gray-200 bg-gray-50 p-6">
-          <h2 id="faq-heading" className="text-2xl font-semibold text-foreground">
+          <h2 id="faq-heading" className="text-2xl font-semibold text-slate-900">
             Najczęściej zadawane pytania
           </h2>
           <dl className="mt-4 space-y-6">
             {faqItems.map((item) => (
               <div key={item.question}>
-                <dt className="text-lg font-medium text-foreground">{item.question}</dt>
+                <dt className="text-lg font-medium text-slate-900">{item.question}</dt>
                 <dd className="mt-2 text-base text-gray-600">
                   <Markdown className="prose-sm">{item.answer}</Markdown>
                 </dd>
@@ -213,7 +213,7 @@ export default async function ArticlePage({ params }: PageProps) {
 
       {citations.length ? (
         <section aria-labelledby="citations-heading" className="rounded-lg border border-gray-200 bg-white p-6">
-          <h2 id="citations-heading" className="text-2xl font-semibold text-foreground">
+          <h2 id="citations-heading" className="text-2xl font-semibold text-slate-900">
             Źródła
           </h2>
           <ul className="mt-4 space-y-4">
@@ -233,7 +233,7 @@ export default async function ArticlePage({ params }: PageProps) {
 
       <footer className="border-t border-gray-200 pt-6 text-sm text-gray-500">
         <div>
-          Sekcja: <span className="font-medium text-foreground">{post.section ?? 'Ogólne'}</span>
+          Sekcja: <span className="font-medium text-slate-900">{post.section ?? 'Ogólne'}</span>
         </div>
         {tags.length > 0 ? (
           <div className="mt-2 flex flex-wrap gap-2">

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import type { Metadata } from 'next';
 import { ReactNode } from 'react';
 import './globals.css';
@@ -13,12 +14,12 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="pl">
-      <body className="min-h-screen bg-white text-gray-800">
+      <body className="min-h-screen bg-white text-slate-900">
         <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 py-6 sm:px-6 lg:px-8">
           <header className="mb-12 border-b border-gray-200 pb-6">
-            <a href="/" className="text-2xl font-semibold text-gray-800">
+            <Link href="/" className="text-2xl font-semibold text-slate-900">
               Blog
-            </a>
+            </Link>
             <p className="mt-2 max-w-2xl text-sm text-gray-600">
               Inspiracje, analizy i najlepsze praktyki dla polskich czytelników.
             </p>
