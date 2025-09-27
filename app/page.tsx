@@ -1,29 +1,51 @@
 import Link from 'next/link';
 import prisma from '@/lib/prisma';
+import type { PostSummary } from '@/types/content';
 
 export const dynamic = 'force-dynamic';
 
-type PostSummary = {
-  id: string;
-  slug: string;
-  title: string;
-  lead: string | null;
-  section: string | null;
-  tags: string[] | null;
-  createdAt: Date;
-};
+function formatDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
 
-function formatDate(date: Date): string {
   return new Intl.DateTimeFormat('pl-PL', {
     dateStyle: 'long'
   }).format(date);
 }
 
+function parseTags(raw: unknown): string[] | null {
+  if (Array.isArray(raw) && raw.every((item) => typeof item === 'string')) {
+    return raw as string[];
+  }
+
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.every((item) => typeof item === 'string')) {
+        return parsed as string[];
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 export default async function HomePage() {
-  const posts = (await prisma.post.findMany({
-    orderBy: { createdAt: 'desc' },
-    take: 20
-  })) as unknown as PostSummary[];
+  const rawPosts = await prisma.$queryRaw<Array<Omit<PostSummary, 'tags'> & { tags: unknown }>>`
+    SELECT id, slug, title, lead, section, tags, created_at
+    FROM posts
+    ORDER BY created_at DESC
+    LIMIT 20
+  `;
+
+  const posts: PostSummary[] = rawPosts.map((post) => ({
+    ...post,
+    tags: parseTags(post.tags)
+  }));
 
   return (
     <div className="space-y-8">
@@ -34,8 +56,8 @@ export default async function HomePage() {
         </p>
       </div>
       <div className="grid gap-6 sm:grid-cols-2">
-        {posts.map((post: PostSummary) => {
-          const tags = Array.isArray(post.tags) ? (post.tags as string[]) : [];
+        {posts.map((post) => {
+          const tags = Array.isArray(post.tags) ? post.tags : [];
 
           return (
             <article
@@ -63,7 +85,7 @@ export default async function HomePage() {
                 ) : null}
               </div>
               <footer className="mt-6 text-sm text-gray-500">
-                Opublikowano {formatDate(post.createdAt)}
+                Opublikowano {formatDate(post.created_at)}
               </footer>
             </article>
           );
