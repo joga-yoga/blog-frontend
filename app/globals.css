@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-background text-foreground antialiased;
+}
+
+a {
+  @apply text-blue-600 underline-offset-2 transition hover:underline;
+}
+
+.prose :where(a):not(:where([class~="not-prose"] *)) {
+  @apply text-blue-600 font-medium underline-offset-4 hover:underline;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
