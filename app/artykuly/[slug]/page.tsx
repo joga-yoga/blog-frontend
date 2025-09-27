@@ -151,8 +151,13 @@ async function getPost(slug: string): Promise<PostResult | null> {
   } satisfies PostResult;
 }
 
-export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const result = await getPost(params.slug);
+type GenerateMetadataProps = {
+  params: Promise<PageProps['params']>;
+};
+
+export async function generateMetadata({ params }: GenerateMetadataProps): Promise<Metadata> {
+  const { slug } = await params;
+  const result = await getPost(slug);
 
   if (!result) {
     return {};
@@ -162,7 +167,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     title: result.post.title,
     description: result.post.description ?? result.post.lead ?? undefined,
     alternates: {
-      canonical: `/artykuly/${params.slug}`
+      canonical: `/artykuly/${slug}`
     }
   } satisfies Metadata;
 }
