@@ -1,13 +1,11 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 :root {
   color-scheme: light;
 }
 
 body {
-  @apply bg-background text-foreground antialiased;
+  @apply bg-white text-slate-900 antialiased;
 }
 
 a {

@@ -3,7 +3,7 @@ import Link from 'next/link';
 export default function ArticleNotFound() {
   return (
     <div className="mx-auto max-w-xl space-y-4 text-center">
-      <h1 className="text-3xl font-bold text-foreground">Nie znaleziono artykułu</h1>
+      <h1 className="text-3xl font-bold text-slate-900">Nie znaleziono artykułu</h1>
       <p className="text-gray-600">
         Wygląda na to, że szukany artykuł został przeniesiony lub nigdy nie istniał.
       </p>

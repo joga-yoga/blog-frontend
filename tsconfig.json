@@ -12,6 +12,10 @@
     "noEmit": true,
     "incremental": true,
     "module": "esnext",
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
     "esModuleInterop": true,
     "moduleResolution": "node",
     "resolveJsonModule": true,
