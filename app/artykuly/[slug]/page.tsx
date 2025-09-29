@@ -118,7 +118,7 @@ function parseCitations(value: unknown): PostFull['citations'] {
 
       return { url, title, date };
     })
-    .filter((item): item is { url: string; title?: string; date?: string } => item !== null);
+    .filter((item) => item !== null);
 
   return items.length ? items : null;
 }
