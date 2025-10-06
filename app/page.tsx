@@ -4,7 +4,13 @@
 
 import Link from 'next/link';
 
-export const revalidate = 0; // чтобы сразу видеть обновления
+export const revalidate = 60;
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://wiedza.joga.yoga';
+
+function buildApiUrl(path: string): string {
+  return new URL(path, SITE_URL).toString();
+}
 
 type PostSummary = {
   id: string | number;
@@ -74,15 +80,18 @@ function isPostSummary(value: unknown): value is PostSummary {
 }
 
 export default async function HomePage() {
-  const base = process.env.NEXT_PUBLIC_BACKEND_URL as string; // будет проставлено
-  const res = await fetch(`${base}/posts?limit=20`, { cache: 'no-store' });
+  const apiUrl = buildApiUrl('/api/posts?limit=20');
+  const res = await fetch(apiUrl, {
+    next: { revalidate: 60 }
+  });
 
   if (!res.ok) {
     throw new Error(`Nie udało się pobrać artykułów: ${res.status}`);
   }
 
   const payload = await res.json();
-  const posts = toPostSummaries(payload);
+  const postsData = toPostSummaries(payload) as unknown;
+  const posts = Array.isArray(postsData) ? (postsData as PostSummary[]) : [];
 
   return (
     <div className="space-y-8">
