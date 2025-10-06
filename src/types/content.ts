@@ -1,5 +1,5 @@
 export type PostSummary = {
-  id: number | string;
+  id: number;
   slug: string;
   title: string;
   lead: string | null;

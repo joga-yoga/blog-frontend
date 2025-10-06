@@ -2,25 +2,28 @@ import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import Script from 'next/script';
 import Link from 'next/link';
+import prisma from '@/lib/prisma';
 import { Markdown } from '@/components/Markdown';
 import type { PostFull } from '@/types/content';
 
 export const dynamic = 'force-dynamic';
 
 type PageProps = {
-  params: Promise<{ slug: string }>;
+  params: { slug: string };
+};
+
+type PostQueryRow = Omit<PostFull, 'tags' | 'faq' | 'citations' | 'body_mdx'> & {
+  tags: unknown;
+  faq: unknown;
+  citations: unknown;
+  body_mdx: string | null;
+  updated_at: string | null;
 };
 
 type PostResult = {
   post: PostFull;
   updated_at: string;
 };
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://wiedza.joga.yoga';
-
-function buildApiUrl(path: string): string {
-  return new URL(path, SITE_URL).toString();
-}
 
 function parseJSON<T>(value: unknown): T | null {
   if (value === null || value === undefined) {
@@ -120,103 +123,36 @@ function parseCitations(value: unknown): PostFull['citations'] {
   return items.length ? items : null;
 }
 
-function extractPostObject(payload: unknown): Record<string, unknown> | null {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+async function getPost(slug: string): Promise<PostResult | null> {
+  const rows = await prisma.$queryRaw<PostQueryRow[]>`
+    SELECT id, slug, title, description, lead, body_mdx, section, tags, faq, citations, created_at, locale, updated_at
+    FROM posts
+    WHERE slug = ${slug}
+    LIMIT 1
+  `;
+
+  const row = rows[0];
+
+  if (!row) {
     return null;
   }
-
-  const record = payload as Record<string, unknown>;
-
-  if (
-    typeof record.slug === 'string' &&
-    typeof record.title === 'string' &&
-    typeof record.created_at === 'string'
-  ) {
-    return record;
-  }
-
-  const candidates = ['post', 'data', 'item', 'result'];
-
-  for (const key of candidates) {
-    const value = record[key];
-    if (value && typeof value === 'object' && !Array.isArray(value)) {
-      const nested = extractPostObject(value);
-      if (nested) {
-        return nested;
-      }
-    }
-  }
-
-  return null;
-}
-
-function normalizePost(payload: unknown): PostResult | null {
-  const record = extractPostObject(payload);
-
-  if (!record) {
-    return null;
-  }
-
-  const slug = typeof record.slug === 'string' ? record.slug : null;
-  const title = typeof record.title === 'string' ? record.title : null;
-  const createdAt = typeof record.created_at === 'string' ? record.created_at : null;
-
-  if (!slug || !title || !createdAt) {
-    return null;
-  }
-
-  const rawId = (record.id ?? slug) as unknown;
-  const id =
-    typeof rawId === 'number'
-      ? rawId
-      : typeof rawId === 'string' && rawId.trim() !== ''
-      ? Number.parseInt(rawId, 10)
-      : slug;
 
   const post: PostFull = {
-    id,
-    slug,
-    title,
-    lead: typeof record.lead === 'string' ? record.lead : null,
-    section: typeof record.section === 'string' ? record.section : null,
-    tags: parseTags(record.tags),
-    created_at: createdAt,
-    description: typeof record.description === 'string' ? record.description : null,
-    body_mdx: typeof record.body_mdx === 'string' ? record.body_mdx : '',
-    faq: parseFaq(record.faq),
-    citations: parseCitations(record.citations),
-    locale: typeof record.locale === 'string' ? record.locale : 'pl-PL'
+    ...row,
+    tags: parseTags(row.tags),
+    faq: parseFaq(row.faq),
+    citations: parseCitations(row.citations),
+    body_mdx: row.body_mdx ?? ''
   };
-
-  const updatedAt =
-    (typeof record.updated_at === 'string' && record.updated_at.trim() !== ''
-      ? record.updated_at
-      : null) ?? createdAt;
 
   return {
     post,
-    updated_at: updatedAt
+    updated_at: row.updated_at ?? row.created_at
   } satisfies PostResult;
 }
 
-async function getPost(slug: string): Promise<PostResult | null> {
-  const apiUrl = buildApiUrl(`/api/posts/${slug}`);
-  const res = await fetch(apiUrl, { cache: 'no-store' });
-
-  if (res.status === 404) {
-    return null;
-  }
-
-  if (!res.ok) {
-    throw new Error(`Nie udało się pobrać artykułu: ${res.status}`);
-  }
-
-  const payload = await res.json();
-  return normalizePost(payload);
-}
-
 type GenerateMetadataProps = {
-  params: PageProps['params'];
+  params: Promise<PageProps['params']>;
 };
 
 export async function generateMetadata({ params }: GenerateMetadataProps): Promise<Metadata> {
@@ -227,13 +163,11 @@ export async function generateMetadata({ params }: GenerateMetadataProps): Promi
     return {};
   }
 
-  const canonicalUrl = new URL(`/artykuly/${slug}`, SITE_URL).toString();
-
   return {
     title: result.post.title,
     description: result.post.description ?? result.post.lead ?? undefined,
     alternates: {
-      canonical: canonicalUrl
+      canonical: `/artykuly/${slug}`
     }
   } satisfies Metadata;
 }
@@ -250,20 +184,18 @@ function formatDate(value: string): string {
 }
 
 export default async function ArticlePage({ params }: PageProps) {
-  const { slug } = await params;
-  const result = await getPost(slug);
+  const result = await getPost(params.slug);
 
   if (!result) {
     notFound();
   }
 
   const { post, updated_at } = result;
-  const faqItems = Array.isArray(post.faq) ? post.faq : [];
-  const citations = Array.isArray(post.citations) ? post.citations : [];
-  const tags = Array.isArray(post.tags) ? post.tags : [];
+  const faqItems = post.faq ?? [];
+  const citations = post.citations ?? [];
+  const tags = post.tags ?? [];
   const createdAt = post.created_at;
   const updatedAt = updated_at;
-  const canonicalUrl = new URL(`/artykuly/${post.slug}`, SITE_URL).toString();
 
   const articleLd = {
     '@context': 'https://schema.org',
@@ -275,7 +207,7 @@ export default async function ArticlePage({ params }: PageProps) {
     description: post.description ?? post.lead ?? undefined,
     mainEntityOfPage: {
       '@type': 'WebPage',
-      '@id': canonicalUrl
+      '@id': `/artykuly/${post.slug}`
     }
   };
 
