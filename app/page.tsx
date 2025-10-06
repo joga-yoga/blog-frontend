@@ -34,10 +34,55 @@ function normalizeTags(raw: unknown): string[] {
   return [];
 }
 
+function toPostSummaries(payload: unknown): PostSummary[] {
+  if (Array.isArray(payload)) {
+    return payload.filter(isPostSummary);
+  }
+
+  if (payload && typeof payload === 'object') {
+    const record = payload as Record<string, unknown>;
+    const preferredKeys = ['items', 'posts', 'data', 'results'];
+
+    for (const key of preferredKeys) {
+      const value = record[key];
+      if (Array.isArray(value)) {
+        return value.filter(isPostSummary);
+      }
+    }
+
+    for (const value of Object.values(record)) {
+      if (Array.isArray(value)) {
+        return value.filter(isPostSummary);
+      }
+    }
+  }
+
+  return [];
+}
+
+function isPostSummary(value: unknown): value is PostSummary {
+  if (!value || typeof value !== 'object') return false;
+
+  const candidate = value as Record<string, unknown>;
+
+  return (
+    (typeof candidate.id === 'string' || typeof candidate.id === 'number') &&
+    typeof candidate.slug === 'string' &&
+    typeof candidate.title === 'string' &&
+    typeof candidate.created_at === 'string'
+  );
+}
+
 export default async function HomePage() {
   const base = process.env.NEXT_PUBLIC_BACKEND_URL as string; // будет проставлено
   const res = await fetch(`${base}/posts?limit=20`, { cache: 'no-store' });
-  const posts = (await res.json()) as PostSummary[];
+
+  if (!res.ok) {
+    throw new Error(`Nie udało się pobrać artykułów: ${res.status}`);
+  }
+
+  const payload = await res.json();
+  const posts = toPostSummaries(payload);
 
   return (
     <div className="space-y-8">
