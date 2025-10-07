@@ -8,8 +8,10 @@ import type { ArticleCitation, ArticleDetailResponse, ArticleFaqItem } from '@/l
 
 export const revalidate = 600;
 
+type PageParams = { slug: string };
+
 type PageProps = {
-  params: { slug: string };
+  params: Promise<PageParams>;
 };
 
 type GenerateMetadataProps = {
@@ -80,8 +82,10 @@ function normalizeCitations(citations: ArticleCitation[]): ArticleCitation[] {
 }
 
 export async function generateMetadata({ params }: GenerateMetadataProps): Promise<Metadata> {
+  const { slug } = await params;
+
   try {
-    const article = await getArticle(params.slug, { revalidate });
+    const article = await getArticle(slug, { revalidate });
     const createdAt = article.created_at ?? article.updated_at;
     const updatedAt = article.updated_at ?? article.created_at;
     const robotsValue = article.seo.robots?.toLowerCase() ?? '';
@@ -124,10 +128,11 @@ export async function generateMetadata({ params }: GenerateMetadataProps): Promi
 }
 
 export default async function ArticlePage({ params }: PageProps) {
+  const { slug } = await params;
   let article: ArticleDetailResponse;
 
   try {
-    article = await getArticle(params.slug, { revalidate });
+    article = await getArticle(slug, { revalidate });
   } catch (error) {
     if (error instanceof NotFoundError) {
       notFound();

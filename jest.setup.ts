@@ -1,10 +1,11 @@
 import '@testing-library/jest-dom';
+import type { Ref } from 'react';
 
 jest.mock('react-markdown', () => {
   const React = require('react');
   return React.forwardRef(function MockReactMarkdown(
     { children }: { children: React.ReactNode; className?: string },
-    ref
+    ref: Ref<HTMLDivElement>
   ) {
     return React.createElement('div', { ref }, children);
   });

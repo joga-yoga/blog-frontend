@@ -54,7 +54,7 @@ it('renders article sections, FAQ and citations', async () => {
     updated_at: '2024-01-02T00:00:00Z'
   });
 
-  const ui = await ArticlePage({ params: { slug: 'transformacja-energetyczna' } });
+  const ui = await ArticlePage({ params: Promise.resolve({ slug: 'transformacja-energetyczna' }) });
   render(ui);
 
   expect(screen.getByRole('heading', { level: 1, name: /Transformacja energetyczna/i })).toBeInTheDocument();
