@@ -80,6 +80,11 @@ const taxonomySchema = z.object({
   tags: z.array(z.string()).default([])
 });
 
+export type ArticleCitation = {
+  url?: string;
+  label: string;
+};
+
 const citationValueSchema = z
   .union([
     z.string(),
@@ -140,15 +145,14 @@ export const articleDocumentSchema = z.object({
   })
 });
 
-export type ArticleDocument = z.infer<typeof articleDocumentSchema> & {
-  article: {
-    citations: ArticleCitation[];
-  } & ArticleDocument['article'];
+type ArticleDocumentSchema = z.infer<typeof articleDocumentSchema>;
+
+type ArticleBody = ArticleDocumentSchema['article'] & {
+  citations: ArticleCitation[];
 };
 
-export type ArticleCitation = {
-  url?: string;
-  label: string;
+export type ArticleDocument = Omit<ArticleDocumentSchema, 'article'> & {
+  article: ArticleBody;
 };
 
 export type ArticleFaqItem = z.infer<typeof faqItemSchema>;
@@ -158,8 +162,10 @@ export const articleDetailResponseSchema = articleDocumentSchema.extend({
   updated_at: z.string().optional()
 });
 
-export type ArticleDetailResponse = z.infer<typeof articleDetailResponseSchema> & {
-  article: ArticleDocument['article'];
+type ArticleDetailResponseSchema = z.infer<typeof articleDetailResponseSchema>;
+
+export type ArticleDetailResponse = Omit<ArticleDetailResponseSchema, 'article'> & {
+  article: ArticleBody;
 };
 
 export const articleCreateRequestSchema = z.object({
@@ -178,7 +184,11 @@ export const articlePublishResponseSchema = z.object({
   post: articleDetailResponseSchema.optional()
 });
 
-export type ArticlePublishResponse = z.infer<typeof articlePublishResponseSchema>;
+type ArticlePublishResponseSchema = z.infer<typeof articlePublishResponseSchema>;
+
+export type ArticlePublishResponse = Omit<ArticlePublishResponseSchema, 'post'> & {
+  post?: ArticleDetailResponse;
+};
 
 export const rubricSchema = z.object({
   code: z.string(),

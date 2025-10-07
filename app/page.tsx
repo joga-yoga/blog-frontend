@@ -9,7 +9,7 @@ const ARTICLES_PER_PAGE = 10;
 type SearchParams = Record<string, string | string[] | undefined>;
 
 type PageProps = {
-  searchParams?: Promise<SearchParams> | SearchParams;
+  searchParams?: Promise<SearchParams>;
 };
 
 type QueryState = {
@@ -72,7 +72,7 @@ function SectionFilter({
 }: {
   query: QueryState;
   articles: ArticleListResponse | null;
-}): JSX.Element {
+}) {
   const sections = new Set<string>();
 
   if (articles) {
@@ -126,7 +126,7 @@ function SectionFilter({
   );
 }
 
-function Pagination({ query, articles }: { query: QueryState; articles: ArticleListResponse }): JSX.Element | null {
+function Pagination({ query, articles }: { query: QueryState; articles: ArticleListResponse }) {
   const { meta } = articles;
 
   if (meta.total_pages <= 1) {
@@ -160,7 +160,7 @@ function Pagination({ query, articles }: { query: QueryState; articles: ArticleL
   );
 }
 
-function ArticleList({ articles, query }: { articles: ArticleListResponse; query: QueryState }): JSX.Element {
+function ArticleList({ articles, query }: { articles: ArticleListResponse; query: QueryState }) {
   if (articles.items.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
@@ -203,7 +203,7 @@ function ArticleList({ articles, query }: { articles: ArticleListResponse; query
   );
 }
 
-function ArticlesFallback({ error }: { error: ApiError }): JSX.Element {
+function ArticlesFallback({ error }: { error: ApiError }) {
   const isUnavailable = error instanceof ServiceUnavailableError || error.status === 502 || error.status === 503;
 
   return (
@@ -223,7 +223,7 @@ function ArticlesFallback({ error }: { error: ApiError }): JSX.Element {
   );
 }
 
-function HealthNotice({ healthy }: { healthy: boolean }): JSX.Element | null {
+function HealthNotice({ healthy }: { healthy: boolean }) {
   if (healthy) {
     return null;
   }

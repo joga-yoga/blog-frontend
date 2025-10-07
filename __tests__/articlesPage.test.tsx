@@ -46,7 +46,7 @@ it('renders articles with pagination and tags', async () => {
     database_url_present: true
   });
 
-  const ui = await HomePage({ searchParams: {} });
+  const ui = await HomePage({ searchParams: Promise.resolve({}) });
   render(ui);
 
   expect(screen.getByText('Najnowsze artykuły')).toBeInTheDocument();
@@ -63,7 +63,7 @@ it('shows service downtime message when backend fails', async () => {
     database_url_present: false
   });
 
-  const ui = await HomePage({ searchParams: {} });
+  const ui = await HomePage({ searchParams: Promise.resolve({}) });
   render(ui);
 
   expect(screen.getByText('Serwis chwilowo niedostępny')).toBeInTheDocument();

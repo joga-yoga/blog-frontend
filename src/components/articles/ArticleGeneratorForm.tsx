@@ -24,7 +24,7 @@ function parseKeywords(value: string): string[] {
     .slice(0, 6);
 }
 
-export function ArticleGeneratorForm({ rubrics }: ArticleGeneratorFormProps): JSX.Element {
+export function ArticleGeneratorForm({ rubrics }: ArticleGeneratorFormProps) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);

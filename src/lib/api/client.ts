@@ -43,7 +43,7 @@ export class NetworkError extends ApiError {
 export type ApiRequestOptions = Omit<RequestInit, 'body'> & {
   body?: RequestInit['body'];
   searchParams?: Record<string, string | number | boolean | null | undefined | Array<string | number | boolean>>;
-  revalidate?: number;
+  revalidate?: number | false;
 };
 
 export function getApiBaseUrl(): string {
@@ -101,13 +101,13 @@ export async function apiFetch<TResponse>(path: string, options: ApiRequestOptio
   const requestHeaders = new Headers(headers);
   requestHeaders.set('Accept', 'application/json');
 
-  const init: RequestInit & { next?: { revalidate?: number } } = {
+  const init: RequestInit & { next?: { revalidate?: number | false } } = {
     ...rest,
     headers: requestHeaders
   };
 
   if (revalidate !== undefined) {
-    init.next = { ...(rest as { next?: { revalidate?: number } }).next, revalidate };
+    init.next = { ...(rest as { next?: { revalidate?: number | false } }).next, revalidate };
   }
 
   if (body !== undefined) {
