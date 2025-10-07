@@ -1,145 +1,283 @@
-// app/page.tsx
-// Минимальная версия: без Prisma, без лишних проверок.
-// Берём данные с backend API через NEXT_PUBLIC_BACKEND_URL.
-
 import Link from 'next/link';
+import { getArticles, getHealth, ServiceUnavailableError, type ApiError } from '@/lib/api/client';
+import type { ArticleListResponse } from '@/lib/api/types';
 
-export const revalidate = 0; // чтобы сразу видеть обновления
+export const revalidate = 300;
 
-type PostSummary = {
-  id: string | number;
-  slug: string;
-  title: string;
-  lead?: string | null;
-  section?: string | null;
-  tags?: string[] | string | null;
-  created_at: string; // ISO
+const ARTICLES_PER_PAGE = 10;
+
+type SearchParams = Record<string, string | string[] | undefined>;
+
+type PageProps = {
+  searchParams?: Promise<SearchParams> | SearchParams;
 };
+
+type QueryState = {
+  page: number;
+  section?: string;
+  q?: string;
+};
+
+function parseQuery(searchParams: SearchParams): QueryState {
+  const params = searchParams ?? {};
+  const pageValue = params.page;
+  const sectionValue = params.section;
+  const searchValue = params.q;
+
+  const page = Array.isArray(pageValue) ? pageValue[0] : pageValue;
+  const section = Array.isArray(sectionValue) ? sectionValue[0] : sectionValue;
+  const q = Array.isArray(searchValue) ? searchValue[0] : searchValue;
+
+  const parsedPage = Number.parseInt(page ?? '1', 10);
+
+  return {
+    page: Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1,
+    section: section?.trim() || undefined,
+    q: q?.trim() || undefined
+  } satisfies QueryState;
+}
 
 function formatDate(value: string): string {
   const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? value
-    : new Intl.DateTimeFormat('pl-PL', { dateStyle: 'long' }).format(date);
-}
-
-function normalizeTags(raw: unknown): string[] {
-  if (Array.isArray(raw) && raw.every((x) => typeof x === 'string')) return raw as string[];
-  if (typeof raw === 'string') {
-    try {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.every((x) => typeof x === 'string')) return parsed as string[];
-    } catch {}
-  }
-  return [];
-}
-
-function toPostSummaries(payload: unknown): PostSummary[] {
-  if (Array.isArray(payload)) {
-    return payload.filter(isPostSummary);
+  if (Number.isNaN(date.getTime())) {
+    return value;
   }
 
-  if (payload && typeof payload === 'object') {
-    const record = payload as Record<string, unknown>;
-    const preferredKeys = ['items', 'posts', 'data', 'results'];
+  return new Intl.DateTimeFormat('pl-PL', { dateStyle: 'long' }).format(date);
+}
 
-    for (const key of preferredKeys) {
-      const value = record[key];
-      if (Array.isArray(value)) {
-        return value.filter(isPostSummary);
+function buildQueryString(query: QueryState, overrides: Partial<QueryState>): string {
+  const params = new URLSearchParams();
+  const next = { ...query, ...overrides };
+
+  if (next.page > 1) {
+    params.set('page', String(next.page));
+  }
+
+  if (next.section) {
+    params.set('section', next.section);
+  }
+
+  if (next.q) {
+    params.set('q', next.q);
+  }
+
+  const qs = params.toString();
+  return qs ? `/?${qs}` : '/';
+}
+
+function SectionFilter({
+  query,
+  articles
+}: {
+  query: QueryState;
+  articles: ArticleListResponse | null;
+}): JSX.Element {
+  const sections = new Set<string>();
+
+  if (articles) {
+    for (const item of articles.items) {
+      if (item.section) {
+        sections.add(item.section);
       }
     }
-
-    for (const value of Object.values(record)) {
-      if (Array.isArray(value)) {
-        return value.filter(isPostSummary);
-      }
-    }
   }
 
-  return [];
-}
-
-function isPostSummary(value: unknown): value is PostSummary {
-  if (!value || typeof value !== 'object') return false;
-
-  const candidate = value as Record<string, unknown>;
+  const options = Array.from(sections).sort((a, b) => a.localeCompare(b, 'pl'));
 
   return (
-    (typeof candidate.id === 'string' || typeof candidate.id === 'number') &&
-    typeof candidate.slug === 'string' &&
-    typeof candidate.title === 'string' &&
-    typeof candidate.created_at === 'string'
+    <div className="flex flex-wrap gap-4">
+      <label className="flex flex-1 flex-col gap-1 text-sm text-gray-700 sm:max-w-xs">
+        <span className="font-medium">Sekcja</span>
+        <select
+          name="section"
+          defaultValue={query.section ?? ''}
+          className="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+        >
+          <option value="">Wszystkie sekcje</option>
+          {options.map((section) => (
+            <option key={section} value={section}>
+              {section}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="flex flex-1 flex-col gap-1 text-sm text-gray-700 sm:max-w-sm">
+        <span className="font-medium">Wyszukaj</span>
+        <input
+          type="search"
+          name="q"
+          defaultValue={query.q ?? ''}
+          placeholder="Słowa kluczowe lub tagi"
+          className="rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+        />
+      </label>
+
+      <div className="flex items-end">
+        <button
+          type="submit"
+          className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
+        >
+          Zastosuj
+        </button>
+      </div>
+    </div>
   );
 }
 
-export default async function HomePage() {
-  const base = process.env.NEXT_PUBLIC_BACKEND_URL as string; // будет проставлено
-  const res = await fetch(`${base}/posts?limit=20`, { cache: 'no-store' });
+function Pagination({ query, articles }: { query: QueryState; articles: ArticleListResponse }): JSX.Element | null {
+  const { meta } = articles;
 
-  if (!res.ok) {
-    throw new Error(`Nie udało się pobrać artykułów: ${res.status}`);
+  if (meta.total_pages <= 1) {
+    return null;
   }
 
-  const payload = await res.json();
-  const posts = toPostSummaries(payload);
+  return (
+    <nav className="flex items-center justify-between gap-4 border-t border-gray-200 pt-6 text-sm text-gray-600" aria-label="Paginacja">
+      <div>
+        Strona {meta.page} z {meta.total_pages} • {meta.total_items} artykułów
+      </div>
+      <div className="flex items-center gap-2">
+        {meta.page > 1 ? (
+          <Link
+            href={buildQueryString(query, { page: meta.page - 1 })}
+            className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1 font-medium text-gray-700 transition hover:bg-gray-50"
+          >
+            Poprzednia
+          </Link>
+        ) : null}
+        {meta.page < meta.total_pages ? (
+          <Link
+            href={buildQueryString(query, { page: meta.page + 1 })}
+            className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1 font-medium text-gray-700 transition hover:bg-gray-50"
+          >
+            Następna
+          </Link>
+        ) : null}
+      </div>
+    </nav>
+  );
+}
+
+function ArticleList({ articles, query }: { articles: ArticleListResponse; query: QueryState }): JSX.Element {
+  if (articles.items.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
+        Brak artykułów spełniających wybrane kryteria.
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid gap-6 sm:grid-cols-2">
+      {articles.items.map((post) => (
+        <article
+          key={post.slug}
+          className="flex h-full flex-col justify-between rounded-lg border border-gray-200 bg-white p-6 shadow-sm transition hover:shadow-md"
+        >
+          <div className="space-y-3">
+            <div className="text-sm font-medium uppercase tracking-wide text-gray-500">{post.section ?? 'Ogólne'}</div>
+            <h2 className="text-2xl font-semibold text-slate-900">
+              <Link href={`/artykuly/${post.slug}`} className="hover:underline">
+                {post.title}
+              </Link>
+            </h2>
+            <p className="line-clamp-3 text-base text-gray-600">
+              {post.updated_at ? `Zaktualizowano ${formatDate(post.updated_at)}` : `Opublikowano ${formatDate(post.created_at)}`}
+            </p>
+            {post.tags.length > 0 ? (
+              <ul className="flex flex-wrap gap-2 text-sm text-blue-700">
+                {post.tags.slice(0, 6).map((tag) => (
+                  <li key={`${post.slug}-${tag}`} className="rounded-full bg-blue-100 px-3 py-1">
+                    <Link href={buildQueryString(query, { page: 1, q: tag })}>#{tag}</Link>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+          <footer className="mt-6 text-sm text-gray-500">Opublikowano {formatDate(post.created_at)}</footer>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function ArticlesFallback({ error }: { error: ApiError }): JSX.Element {
+  const isUnavailable = error instanceof ServiceUnavailableError || error.status === 502 || error.status === 503;
+
+  return (
+    <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-gray-600">
+      {isUnavailable ? (
+        <>
+          <p className="font-semibold text-slate-900">Serwis chwilowo niedostępny</p>
+          <p className="mt-2 text-sm">Spróbuj ponownie za kilka minut. Nasze API jest w trakcie aktualizacji.</p>
+        </>
+      ) : (
+        <>
+          <p className="font-semibold text-slate-900">Nie udało się pobrać artykułów</p>
+          <p className="mt-2 text-sm">Odśwież stronę lub spróbuj ponownie później.</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+function HealthNotice({ healthy }: { healthy: boolean }): JSX.Element | null {
+  if (healthy) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-md border border-yellow-300 bg-yellow-50 p-4 text-sm text-yellow-900">
+      Trwają prace serwisowe w backendzie. Niektóre funkcje mogą działać wolniej niż zwykle.
+    </div>
+  );
+}
+
+export default async function HomePage({ searchParams }: PageProps) {
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const query = parseQuery(resolvedSearchParams);
+
+  const [articlesResult, healthResult] = await Promise.allSettled([
+    getArticles({
+      page: query.page,
+      per_page: ARTICLES_PER_PAGE,
+      section: query.section,
+      q: query.q
+    }, { revalidate }),
+    getHealth({ revalidate: 120 })
+  ]);
+
+  const articles = articlesResult.status === 'fulfilled' ? articlesResult.value : null;
+  const articlesError = articlesResult.status === 'rejected' ? (articlesResult.reason as ApiError) : null;
+  const health = healthResult.status === 'fulfilled' ? healthResult.value : null;
+  const isHealthy = health ? health.status === 'ok' && health.db === 'ok' : false;
 
   return (
     <div className="space-y-8">
-      <div>
+      <div className="space-y-3">
         <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Najnowsze artykuły</h1>
-        <p className="mt-2 max-w-2xl text-gray-600">
-          Bądź na bieżąco z naszymi analizami, komentarzami i inspiracjami.
+        <p className="max-w-2xl text-gray-600">
+          Bądź na bieżąco z naszymi analizami, komentarzami i inspiracjami. Skorzystaj z filtrów, aby znaleźć interesującą Cię sekcję lub temat.
         </p>
+        <HealthNotice healthy={isHealthy} />
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-2">
-        {posts.map((post) => {
-          const tags = normalizeTags(post.tags);
-          return (
-            <article
-              key={post.id}
-              className="flex h-full flex-col justify-between rounded-lg border border-gray-200 bg-white p-6 shadow-sm transition hover:shadow-md"
-            >
-              <div className="space-y-3">
-                <div className="text-sm font-medium uppercase tracking-wide text-gray-500">
-                  {post.section ?? 'Ogólne'}
-                </div>
+      <form className="space-y-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm" role="search">
+        <SectionFilter query={query} articles={articles} />
+      </form>
 
-                <h2 className="text-2xl font-semibold text-slate-900">
-                  <Link href={`/artykuly/${post.slug}`} className="hover:underline">
-                    {post.title}
-                  </Link>
-                </h2>
-
-                {post.lead ? (
-                  <p className="line-clamp-3 text-base text-gray-600">{post.lead}</p>
-                ) : null}
-
-                {tags.length > 0 ? (
-                  <ul className="flex flex-wrap gap-2 text-sm text-blue-700">
-                    {tags.slice(0, 4).map((tag) => (
-                      <li key={tag} className="rounded-full bg-blue-100 px-3 py-1">
-                        {tag}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-
-              <footer className="mt-6 text-sm text-gray-500">
-                Opublikowano {formatDate(post.created_at)}
-              </footer>
-            </article>
-          );
-        })}
-
-        {posts.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-gray-500">
-            Brak artykułów do wyświetlenia.
-          </div>
-        ) : null}
-      </div>
+      {articles ? (
+        <div className="space-y-8">
+          <ArticleList articles={articles} query={query} />
+          <Pagination query={query} articles={articles} />
+        </div>
+      ) : articlesError ? (
+        <ArticlesFallback error={articlesError} />
+      ) : (
+        <div className="rounded-lg border border-dashed border-gray-300 p-6 text-center text-gray-500">Ładowanie danych…</div>
+      )}
     </div>
   );
 }

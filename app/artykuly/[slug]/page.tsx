@@ -1,273 +1,196 @@
-import { notFound } from 'next/navigation';
-import type { Metadata } from 'next';
-import Script from 'next/script';
 import Link from 'next/link';
-import prisma from '@/lib/prisma';
+import Script from 'next/script';
+import type { Metadata } from 'next';
+import { notFound } from 'next/navigation';
 import { Markdown } from '@/components/Markdown';
-import type { PostFull } from '@/types/content';
+import { getArticle, NotFoundError } from '@/lib/api/client';
+import type { ArticleCitation, ArticleDetailResponse, ArticleFaqItem } from '@/lib/api/types';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 600;
 
 type PageProps = {
   params: { slug: string };
 };
 
-type PostQueryRow = Omit<PostFull, 'tags' | 'faq' | 'citations' | 'body_mdx'> & {
-  tags: unknown;
-  faq: unknown;
-  citations: unknown;
-  body_mdx: string | null;
-  updated_at: string | null;
-};
-
-type PostResult = {
-  post: PostFull;
-  updated_at: string;
-};
-
-function parseJSON<T>(value: unknown): T | null {
-  if (value === null || value === undefined) {
-    return null;
-  }
-
-  if (typeof value === 'string') {
-    try {
-      return JSON.parse(value) as T;
-    } catch {
-      return null;
-    }
-  }
-
-  return value as T;
-}
-
-function parseTags(value: unknown): string[] | null {
-  const parsed = parseJSON<unknown>(value);
-
-  if (!Array.isArray(parsed)) {
-    return null;
-  }
-
-  const tags = parsed
-    .filter((item): item is string => typeof item === 'string')
-    .map((tag) => tag.trim())
-    .filter(Boolean);
-
-  return tags.length ? tags : null;
-}
-
-function parseFaq(value: unknown): PostFull['faq'] {
-  const parsed = parseJSON<unknown>(value);
-
-  if (!Array.isArray(parsed)) {
-    return null;
-  }
-
-  const items = parsed
-    .map((item) => {
-      if (typeof item !== 'object' || item === null || Array.isArray(item)) {
-        return null;
-      }
-
-      const question =
-        ('q' in item && typeof item.q === 'string' && item.q.trim()) ||
-        ('question' in item && typeof item.question === 'string' && item.question.trim()) ||
-        null;
-      const answer =
-        ('a' in item && typeof item.a === 'string' && item.a.trim()) ||
-        ('answer' in item && typeof item.answer === 'string' && item.answer.trim()) ||
-        null;
-
-      if (!question || !answer) {
-        return null;
-      }
-
-      return { q: question, a: answer };
-    })
-    .filter((item): item is { q: string; a: string } => item !== null);
-
-  return items.length ? items : null;
-}
-
-function parseCitations(value: unknown): PostFull['citations'] {
-  const parsed = parseJSON<unknown>(value);
-
-  if (!Array.isArray(parsed)) {
-    return null;
-  }
-
-  const items = parsed
-    .map((item) => {
-      if (typeof item !== 'object' || item === null || Array.isArray(item)) {
-        return null;
-      }
-
-      const url = 'url' in item && typeof item.url === 'string' ? item.url.trim() : null;
-      if (!url) {
-        return null;
-      }
-
-      const title =
-        ('title' in item && typeof item.title === 'string' && item.title.trim()) ||
-        ('label' in item && typeof item.label === 'string' && item.label.trim()) ||
-        undefined;
-      const date =
-        ('date' in item && typeof item.date === 'string' && item.date.trim()) ||
-        ('published_at' in item && typeof item.published_at === 'string' && item.published_at.trim()) ||
-        undefined;
-
-      return { url, title, date };
-    })
-    .filter((item) => item !== null);
-
-  return items.length ? items : null;
-}
-
-async function getPost(slug: string): Promise<PostResult | null> {
-  const rows = await prisma.$queryRaw<PostQueryRow[]>`
-    SELECT id, slug, title, description, lead, body_mdx, section, tags, faq, citations, created_at, locale, updated_at
-    FROM posts
-    WHERE slug = ${slug}
-    LIMIT 1
-  `;
-
-  const row = rows[0];
-
-  if (!row) {
-    return null;
-  }
-
-  const post: PostFull = {
-    ...row,
-    tags: parseTags(row.tags),
-    faq: parseFaq(row.faq),
-    citations: parseCitations(row.citations),
-    body_mdx: row.body_mdx ?? ''
-  };
-
-  return {
-    post,
-    updated_at: row.updated_at ?? row.created_at
-  } satisfies PostResult;
-}
-
 type GenerateMetadataProps = {
-  params: Promise<PageProps['params']>;
+  params: PageProps['params'];
 };
 
-export async function generateMetadata({ params }: GenerateMetadataProps): Promise<Metadata> {
-  const { slug } = await params;
-  const result = await getPost(slug);
-
-  if (!result) {
-    return {};
-  }
-
-  return {
-    title: result.post.title,
-    description: result.post.description ?? result.post.lead ?? undefined,
-    alternates: {
-      canonical: `/artykuly/${slug}`
-    }
-  } satisfies Metadata;
-}
-
-function formatDate(value: string): string {
+function formatDate(value: string | undefined): string | null {
+  if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
+  return new Intl.DateTimeFormat('pl-PL', { dateStyle: 'long' }).format(date);
+}
 
-  return new Intl.DateTimeFormat('pl-PL', {
-    dateStyle: 'long'
-  }).format(date);
+function mapFaq(items: ArticleFaqItem[]): ArticleFaqItem[] {
+  return items.map((item) => ({
+    question: item.question.trim(),
+    answer: item.answer.trim()
+  }));
+}
+
+function buildArticleJsonLd(article: ArticleDetailResponse) {
+  const createdAt = article.created_at ?? article.updated_at ?? new Date().toISOString();
+  const updatedAt = article.updated_at ?? createdAt;
+
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: article.article.headline,
+    description: article.seo.description,
+    datePublished: new Date(createdAt).toISOString(),
+    dateModified: new Date(updatedAt).toISOString(),
+    inLanguage: article.locale,
+    mainEntityOfPage: {
+      '@type': 'WebPage',
+      '@id': article.seo.canonical ?? `/artykuly/${article.slug}`
+    }
+  };
+}
+
+function buildFaqJsonLd(faq: ArticleFaqItem[]) {
+  if (faq.length === 0) {
+    return null;
+  }
+
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: faq.map((item) => ({
+      '@type': 'Question',
+      name: item.question,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: item.answer
+      }
+    }))
+  };
+}
+
+function normalizeCitations(citations: ArticleCitation[]): ArticleCitation[] {
+  return citations
+    .map((citation) => ({
+      url: citation.url?.trim(),
+      label: citation.label.trim()
+    }))
+    .filter((item) => item.label.length > 0);
+}
+
+export async function generateMetadata({ params }: GenerateMetadataProps): Promise<Metadata> {
+  try {
+    const article = await getArticle(params.slug, { revalidate });
+    const createdAt = article.created_at ?? article.updated_at;
+    const updatedAt = article.updated_at ?? article.created_at;
+    const robotsValue = article.seo.robots?.toLowerCase() ?? '';
+    const robots = robotsValue
+      ? {
+          index: !robotsValue.includes('noindex'),
+          follow: !robotsValue.includes('nofollow')
+        }
+      : undefined;
+
+    return {
+      title: article.seo.title ?? article.article.headline,
+      description: article.seo.description ?? article.article.lead,
+      alternates: {
+        canonical: article.seo.canonical ?? `/artykuly/${article.slug}`
+      },
+      keywords: article.taxonomy.tags,
+      openGraph: {
+        type: 'article',
+        locale: article.locale,
+        title: article.seo.title ?? article.article.headline,
+        description: article.seo.description ?? article.article.lead,
+        url: article.seo.canonical ?? `/artykuly/${article.slug}`,
+        tags: article.taxonomy.tags,
+        section: article.taxonomy.section,
+        publishedTime: createdAt,
+        modifiedTime: updatedAt
+      },
+      robots
+    } satisfies Metadata;
+  } catch (error) {
+    if (error instanceof NotFoundError) {
+      return {
+        title: 'Artykuł niedostępny',
+        description: 'Nie znaleziono żądanego artykułu.'
+      } satisfies Metadata;
+    }
+    throw error;
+  }
 }
 
 export default async function ArticlePage({ params }: PageProps) {
-  const result = await getPost(params.slug);
+  let article: ArticleDetailResponse;
 
-  if (!result) {
-    notFound();
+  try {
+    article = await getArticle(params.slug, { revalidate });
+  } catch (error) {
+    if (error instanceof NotFoundError) {
+      notFound();
+    }
+    throw error;
   }
 
-  const { post, updated_at } = result;
-  const faqItems = post.faq ?? [];
-  const citations = post.citations ?? [];
-  const tags = post.tags ?? [];
-  const createdAt = post.created_at;
-  const updatedAt = updated_at;
+  const faqItems = mapFaq(article.aeo.faq);
+  const citations = normalizeCitations(article.article.citations);
+  const createdAt = formatDate(article.created_at ?? article.updated_at ?? undefined);
+  const updatedAt = formatDate(article.updated_at ?? article.created_at ?? undefined);
 
-  const articleLd = {
-    '@context': 'https://schema.org',
-    '@type': 'Article',
-    headline: post.title,
-    datePublished: new Date(createdAt).toISOString(),
-    dateModified: new Date(updatedAt).toISOString(),
-    inLanguage: post.locale,
-    description: post.description ?? post.lead ?? undefined,
-    mainEntityOfPage: {
-      '@type': 'WebPage',
-      '@id': `/artykuly/${post.slug}`
-    }
-  };
-
-  const faqLd = faqItems.length
-    ? {
-        '@context': 'https://schema.org',
-        '@type': 'FAQPage',
-        mainEntity: faqItems.map((item) => ({
-          '@type': 'Question',
-          name: item.q,
-          acceptedAnswer: {
-            '@type': 'Answer',
-            text: item.a
-          }
-        }))
-      }
-    : null;
+  const articleJsonLd = buildArticleJsonLd(article);
+  const faqJsonLd = buildFaqJsonLd(faqItems);
 
   return (
     <article className="space-y-10">
       <Script id="jsonld-article" type="application/ld+json">
-        {JSON.stringify(articleLd)}
+        {JSON.stringify(articleJsonLd)}
       </Script>
-      {faqLd ? (
-        <Script id="jsonld-faq" type="application/ld+json">
-          {JSON.stringify(faqLd)}
-        </Script>
+      {faqJsonLd ? (
+        <Script id="jsonld-faq" type="application/ld+json">{JSON.stringify(faqJsonLd)}</Script>
       ) : null}
 
       <header className="space-y-4">
-        <div className="text-sm font-semibold uppercase tracking-wide text-gray-500">{post.section ?? 'Ogólne'}</div>
-        <h1 className="text-4xl font-bold text-slate-900 sm:text-5xl">{post.title}</h1>
-        {post.lead ? <p className="max-w-3xl text-lg text-gray-600">{post.lead}</p> : null}
+        <div className="text-sm font-semibold uppercase tracking-wide text-gray-500">{article.taxonomy.section}</div>
+        <h1 className="text-4xl font-bold text-slate-900 sm:text-5xl">{article.article.headline}</h1>
+        {article.article.lead ? <p className="max-w-3xl text-lg text-gray-600">{article.article.lead}</p> : null}
         <div className="text-sm text-gray-500">
-          Opublikowano {formatDate(createdAt)} • Zaktualizowano {formatDate(updatedAt)}
+          {createdAt ? <>Opublikowano {createdAt}</> : null}
+          {updatedAt ? <span className="ml-2">• Zaktualizowano {updatedAt}</span> : null}
         </div>
-        {tags.length > 0 ? (
+        {article.taxonomy.tags.length > 0 ? (
           <ul className="flex flex-wrap gap-2 text-sm text-blue-700">
-            {tags.map((tag) => (
+            {article.taxonomy.tags.map((tag) => (
               <li key={tag} className="rounded-full bg-blue-100 px-3 py-1">
-                {tag}
+                <Link href={`/?q=${encodeURIComponent(tag)}`}>#{tag}</Link>
               </li>
             ))}
           </ul>
         ) : null}
       </header>
 
-      {post.body_mdx ? <Markdown>{post.body_mdx}</Markdown> : null}
+      <div className="space-y-10">
+        {article.article.sections.map((section, index) => (
+          <section key={`${index}-${section.title}`} className="space-y-4">
+            <h2 className="text-2xl font-semibold text-slate-900">{section.title}</h2>
+            <Markdown>{section.body}</Markdown>
+          </section>
+        ))}
+      </div>
 
-      {faqItems.length ? (
+      {faqItems.length > 0 ? (
         <section aria-labelledby="faq-heading" className="rounded-lg border border-gray-200 bg-gray-50 p-6">
           <h2 id="faq-heading" className="text-2xl font-semibold text-slate-900">
             Najczęściej zadawane pytania
           </h2>
           <dl className="mt-4 space-y-6">
             {faqItems.map((item) => (
-              <div key={item.q}>
-                <dt className="text-lg font-medium text-slate-900">{item.q}</dt>
+              <div key={item.question}>
+                <dt className="text-lg font-medium text-slate-900">{item.question}</dt>
                 <dd className="mt-2 text-base text-gray-600">
-                  <Markdown className="prose-sm">{item.a}</Markdown>
+                  <Markdown className="prose-sm">{item.answer}</Markdown>
                 </dd>
               </div>
             ))}
@@ -275,38 +198,50 @@ export default async function ArticlePage({ params }: PageProps) {
         </section>
       ) : null}
 
-      {citations.length ? (
+      {citations.length > 0 ? (
         <section aria-labelledby="citations-heading" className="rounded-lg border border-gray-200 bg-white p-6">
           <h2 id="citations-heading" className="text-2xl font-semibold text-slate-900">
             Źródła
           </h2>
           <ul className="mt-4 space-y-4">
-            {citations.map((citation, index) => (
-              <li key={citation.url + index} className="space-y-1">
-                <Link href={citation.url} className="text-base font-medium text-blue-700" target="_blank" rel="noreferrer">
-                  {citation.title ?? citation.url}
-                </Link>
-                {citation.date ? (
-                  <p className="text-sm text-gray-500">{formatDate(citation.date)}</p>
-                ) : null}
-              </li>
-            ))}
+            {citations.map((citation, index) => {
+              const isExternal = citation.url?.startsWith('http');
+              return (
+                <li key={`${citation.label}-${index}`} className="space-y-1">
+                  {citation.url ? (
+                    <Link
+                      href={citation.url}
+                      className="text-base font-medium text-blue-700"
+                      target={isExternal ? '_blank' : undefined}
+                      rel={isExternal ? 'noreferrer' : undefined}
+                    >
+                      {citation.label}
+                    </Link>
+                  ) : (
+                    <p className="text-base text-gray-700">{citation.label}</p>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         </section>
       ) : null}
 
       <footer className="border-t border-gray-200 pt-6 text-sm text-gray-500">
         <div>
-          Sekcja: <span className="font-medium text-slate-900">{post.section ?? 'Ogólne'}</span>
+          Sekcja: <span className="font-medium text-slate-900">{article.taxonomy.section}</span>
         </div>
-        {tags.length > 0 ? (
+        {article.taxonomy.categories.length > 0 ? (
           <div className="mt-2 flex flex-wrap gap-2">
-            {tags.map((tag) => (
-              <span key={tag} className="rounded-full bg-gray-200 px-3 py-1 text-gray-700">
-                #{tag}
+            {article.taxonomy.categories.map((category) => (
+              <span key={category} className="rounded-full bg-gray-200 px-3 py-1 text-gray-700">
+                {category}
               </span>
             ))}
           </div>
+        ) : null}
+        {article.aeo.geo_focus.length > 0 ? (
+          <p className="mt-2">Obszary geograficzne: {article.aeo.geo_focus.join(', ')}</p>
         ) : null}
       </footer>
     </article>
