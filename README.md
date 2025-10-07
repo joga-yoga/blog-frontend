@@ -1,11 +1,11 @@
 # Blog Frontend
 
-A Next.js (App Router) frontend for rendering public blog content backed by PostgreSQL and Prisma.
+Aplikacja oparta o Next.js (App Router) renderująca artykuły dostarczane przez usługę **blog-backend**.
 
 ## Wymagania wstępne
 
 - Node.js 18+
-- Dostęp do bazy danych PostgreSQL oraz poprawnie ustawiona zmienna środowiskowa `DATABASE_URL`
+- Działająca instancja serwisu `blog-backend` (FastAPI)
 
 ## Instalacja
 
@@ -15,13 +15,15 @@ npm install
 
 ## Konfiguracja środowiska
 
-Skopiuj plik `.env.example` do `.env` i uzupełnij dane połączenia z bazą danych:
+Skopiuj plik `.env.example` do `.env` i ustaw adres API backendu:
 
 ```bash
 cp .env.example .env
 ```
 
-Następnie zaktualizuj wartość `DATABASE_URL`.
+Kluczowa zmienna:
+
+- `NEXT_PUBLIC_API_BASE_URL` – podstawowy adres URL usługi `blog-backend` (np. `https://api.example.com`).
 
 ## Uruchomienie w trybie deweloperskim
 
@@ -38,14 +40,6 @@ npm run build
 npm run start
 ```
 
-## Generowanie klienta Prisma
-
-Po każdej zmianie schematu Prisma uruchom:
-
-```bash
-npx prisma generate
-```
-
 ## Stylowanie
 
-Projekt korzysta z Tailwind CSS wraz z wtyczką `@tailwindcss/typography`.
+Projekt korzysta z Tailwind CSS oraz wtyczki `@tailwindcss/typography`.

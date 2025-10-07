@@ -1,6 +1,7 @@
 'use client';
 
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import type { JSX } from 'react';
 
 type MarkdownProps = {
@@ -14,6 +15,7 @@ export function Markdown({ children, className, components }: MarkdownProps): JS
     <ReactMarkdown
       className={['prose prose-neutral max-w-none', className].filter(Boolean).join(' ')}
       components={components}
+      remarkPlugins={[remarkGfm]}
     >
       {children}
     </ReactMarkdown>
