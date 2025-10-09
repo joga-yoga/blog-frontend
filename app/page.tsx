@@ -127,29 +127,29 @@ function SectionFilter({
 }
 
 function Pagination({ query, articles }: { query: QueryState; articles: ArticleListResponse }) {
-  const { meta } = articles;
+  const { page, total_pages: totalPages, total } = articles;
 
-  if (meta.total_pages <= 1) {
+  if (totalPages <= 1) {
     return null;
   }
 
   return (
     <nav className="flex items-center justify-between gap-4 border-t border-gray-200 pt-6 text-sm text-gray-600" aria-label="Paginacja">
       <div>
-        Strona {meta.page} z {meta.total_pages} • {meta.total_items} artykułów
+        Strona {page} z {totalPages} • {total} artykułów
       </div>
       <div className="flex items-center gap-2">
-        {meta.page > 1 ? (
+        {page > 1 ? (
           <Link
-            href={buildQueryString(query, { page: meta.page - 1 })}
+            href={buildQueryString(query, { page: page - 1 })}
             className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1 font-medium text-gray-700 transition hover:bg-gray-50"
           >
             Poprzednia
           </Link>
         ) : null}
-        {meta.page < meta.total_pages ? (
+        {page < totalPages ? (
           <Link
-            href={buildQueryString(query, { page: meta.page + 1 })}
+            href={buildQueryString(query, { page: page + 1 })}
             className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1 font-medium text-gray-700 transition hover:bg-gray-50"
           >
             Następna
@@ -161,7 +161,9 @@ function Pagination({ query, articles }: { query: QueryState; articles: ArticleL
 }
 
 function ArticleList({ articles, query }: { articles: ArticleListResponse; query: QueryState }) {
-  if (articles.items.length === 0) {
+  const items = articles.items ?? [];
+
+  if (items.length === 0) {
     return (
       <div className="rounded-lg border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
         Brak artykułów spełniających wybrane kryteria.
@@ -171,7 +173,7 @@ function ArticleList({ articles, query }: { articles: ArticleListResponse; query
 
   return (
     <div className="grid gap-6 sm:grid-cols-2">
-      {articles.items.map((post) => (
+      {items.map((post) => (
         <article
           key={post.slug}
           className="flex h-full flex-col justify-between rounded-lg border border-gray-200 bg-white p-6 shadow-sm transition hover:shadow-md"

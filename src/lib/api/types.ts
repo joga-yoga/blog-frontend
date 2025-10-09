@@ -58,21 +58,164 @@ export const articleSummarySchema = z
 
 export type ArticleSummary = z.infer<typeof articleSummarySchema>;
 
-export const paginationMetaSchema = z.object({
-  page: z.number(),
-  per_page: z.number(),
-  total_items: z.number(),
-  total_pages: z.number()
-});
+export type Paged<T> = {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+};
 
-export type PaginationMeta = z.infer<typeof paginationMetaSchema>;
+export type ArticleListResponse = Paged<ArticleSummary>;
 
-export const articleListResponseSchema = z.object({
-  meta: paginationMetaSchema,
-  items: z.array(articleSummarySchema)
-});
+function coerceNumber(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
 
-export type ArticleListResponse = z.infer<typeof articleListResponseSchema>;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return undefined;
+}
+
+const emptyPaged: Paged<never> = {
+  items: [],
+  total: 0,
+  page: 1,
+  page_size: 0,
+  total_pages: 0
+};
+
+export function toPaged<T>(
+  data: unknown,
+  itemSchema: z.ZodType<T>,
+  options: { resourceName?: string } = {}
+): Paged<T> {
+  const resourceName = options.resourceName ?? 'items';
+  const parseItems = (value: unknown): T[] => {
+    if (value === undefined) {
+      return [];
+    }
+
+    const result = z.array(itemSchema).safeParse(value);
+
+    if (!result.success) {
+      console.warn(
+        `Failed to parse ${resourceName} array from API response. Returning an empty list instead.`,
+        result.error.flatten()
+      );
+      return [];
+    }
+
+    return result.data;
+  };
+
+  const resolveFromItems = (itemsSource: unknown, metaSource: Record<string, unknown> | undefined) => {
+    const items = parseItems(itemsSource);
+    const total =
+      coerceNumber(metaSource?.total) ??
+      coerceNumber(metaSource?.total_items) ??
+      items.length;
+    const resolvedPageSize =
+      coerceNumber(metaSource?.page_size) ??
+      coerceNumber(metaSource?.per_page) ??
+      (items.length > 0 ? items.length : 0) ??
+      0;
+    const totalPages =
+      coerceNumber(metaSource?.total_pages) ??
+      (resolvedPageSize > 0 ? Math.max(1, Math.ceil(total / resolvedPageSize)) : total > 0 ? 1 : 0);
+
+    return { items, total, pageSize: resolvedPageSize ?? 0, totalPages };
+  };
+
+  if (Array.isArray(data)) {
+    const { items, total, pageSize, totalPages } = resolveFromItems(data, undefined);
+    return {
+      items,
+      total,
+      page: 1,
+      page_size: pageSize,
+      total_pages: totalPages
+    } satisfies Paged<T>;
+  }
+
+  if (data && typeof data === 'object') {
+    const record = data as Record<string, unknown>;
+    const meta = typeof record.meta === 'object' && record.meta !== null ? (record.meta as Record<string, unknown>) : undefined;
+
+    const hasItems = Object.prototype.hasOwnProperty.call(record, 'items');
+    const hasResults = Object.prototype.hasOwnProperty.call(record, 'results');
+    const itemsSource = hasItems
+      ? record.items
+      : hasResults
+        ? (record as Record<string, unknown>).results
+        : Array.isArray(record.data)
+          ? record.data
+          : undefined;
+
+    const { items, total, pageSize, totalPages } = resolveFromItems(itemsSource, {
+      ...meta,
+      total: record.total ?? meta?.total,
+      total_items: record.total_items ?? meta?.total_items,
+      page_size: record.page_size ?? meta?.page_size,
+      per_page: record.per_page ?? meta?.per_page,
+      total_pages: record.total_pages ?? meta?.total_pages
+    });
+
+    const page =
+      coerceNumber(record.page) ??
+      coerceNumber(record.current_page) ??
+      coerceNumber(meta?.page) ??
+      1;
+
+    const resolvedPageSize =
+      coerceNumber(record.page_size) ??
+      coerceNumber(record.per_page) ??
+      coerceNumber(meta?.page_size) ??
+      coerceNumber(meta?.per_page) ??
+      pageSize;
+
+    const resolvedTotal =
+      coerceNumber(record.total) ??
+      coerceNumber(record.total_items) ??
+      coerceNumber(meta?.total) ??
+      coerceNumber(meta?.total_items) ??
+      total;
+
+    const resolvedTotalPages =
+      coerceNumber(record.total_pages) ??
+      coerceNumber(meta?.total_pages) ??
+      (resolvedPageSize && resolvedPageSize > 0
+        ? Math.max(1, Math.ceil(resolvedTotal / resolvedPageSize))
+        : resolvedTotal > 0
+          ? 1
+          : 0);
+
+    return {
+      items,
+      total: resolvedTotal,
+      page,
+      page_size: resolvedPageSize ?? 0,
+      total_pages: resolvedTotalPages
+    } satisfies Paged<T>;
+  }
+
+  console.warn('Unexpected paged API response shape. Returning an empty result.', data);
+
+  return {
+    ...emptyPaged,
+    items: [] as T[]
+  };
+}
+
+export function parseArticleListResponse(data: unknown): ArticleListResponse {
+  return toPaged(data, articleSummarySchema, { resourceName: 'articles' });
+}
 
 const taxonomySchema = z.object({
   section: z.string(),

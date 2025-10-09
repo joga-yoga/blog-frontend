@@ -1,4 +1,21 @@
-import { articleCreateRequestSchema, articleDetailResponseSchema, articleDocumentSchema, articleListResponseSchema, articlePublishResponseSchema, articleSchemaResponseSchema, healthResponseSchema, rubricsResponseSchema, type ArticleCreateRequest, type ArticleDetailResponse, type ArticleListQuery, type ArticleListResponse, type ArticlePublishResponse, type ArticleSchemaResponse, type HealthResponse, type Rubric } from './types';
+import {
+  articleCreateRequestSchema,
+  articleDetailResponseSchema,
+  articleDocumentSchema,
+  articlePublishResponseSchema,
+  articleSchemaResponseSchema,
+  healthResponseSchema,
+  parseArticleListResponse,
+  rubricsResponseSchema,
+  type ArticleCreateRequest,
+  type ArticleDetailResponse,
+  type ArticleListQuery,
+  type ArticleListResponse,
+  type ArticlePublishResponse,
+  type ArticleSchemaResponse,
+  type HealthResponse,
+  type Rubric
+} from './types';
 
 const DEFAULT_BASE_URL = 'http://localhost:8000';
 
@@ -161,7 +178,7 @@ export async function getArticleSchema(options?: Pick<ApiRequestOptions, 'revali
 export async function getArticles(query: ArticleListQuery, options?: Pick<ApiRequestOptions, 'revalidate'>): Promise<ArticleListResponse> {
   const params = serializeArticleListQuery(query);
   const data = await apiFetch<unknown>('/articles', { searchParams: params, revalidate: options?.revalidate });
-  return articleListResponseSchema.parse(data);
+  return parseArticleListResponse(data);
 }
 
 export async function getArticle(slug: string, options?: Pick<ApiRequestOptions, 'revalidate'>): Promise<ArticleDetailResponse> {

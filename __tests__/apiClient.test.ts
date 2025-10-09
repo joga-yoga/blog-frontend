@@ -1,4 +1,6 @@
 import { apiFetch, buildUrl, getArticles, serializeArticleListQuery } from '@/lib/api/client';
+import { articleSummarySchema, parseArticleListResponse, toPaged } from '@/lib/api/types';
+import pagedArticles from '../app/__fixtures__/articles.paged.json';
 
 describe('API client utilities', () => {
   afterEach(() => {
@@ -76,9 +78,55 @@ describe('API client utilities', () => {
 
     const result = await getArticles({ page: 1, per_page: 10 });
 
-    expect(result.meta.total_items).toBe(1);
+    expect(result.total).toBe(1);
+    expect(result.page).toBe(1);
+    expect(result.page_size).toBe(10);
+    expect(result.total_pages).toBe(1);
     expect(result.items[0].tags).toEqual(['a', 'b']);
     const [requestUrl] = (global.fetch as jest.Mock).mock.calls[0];
     expect((requestUrl as URL).toString()).toBe('https://example.com/articles?page=1&per_page=10');
+  });
+
+  it('accepts bare arrays and returns a paged structure', () => {
+    const result = parseArticleListResponse(pagedArticles.items);
+
+    expect(result.total).toBe(pagedArticles.items.length);
+    expect(result.page).toBe(1);
+    expect(result.total_pages).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('toPaged', () => {
+  it('normalizes legacy meta fields', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const response = {
+      meta: { page: '2', per_page: '20', total_items: '42', total_pages: '3' },
+      items: pagedArticles.items
+    };
+
+    const result = toPaged(response, articleSummarySchema, { resourceName: 'articles' });
+
+    expect(result.page).toBe(2);
+    expect(result.page_size).toBe(20);
+    expect(result.total).toBe(42);
+    expect(result.total_pages).toBe(3);
+    expect(warnSpy).not.toHaveBeenCalled();
+
+    warnSpy.mockRestore();
+  });
+
+  it('falls back to empty values on invalid payloads', () => {
+    const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = toPaged({ items: null }, articleSummarySchema, { resourceName: 'articles' });
+
+    expect(result.items).toEqual([]);
+    expect(result.total).toBe(0);
+    expect(result.page).toBe(1);
+    expect(result.total_pages).toBe(0);
+    expect(warnSpy).toHaveBeenCalled();
+
+    warnSpy.mockRestore();
   });
 });
