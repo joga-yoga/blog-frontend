@@ -1,5 +1,25 @@
 import { z } from 'zod';
 
+// ADAPTER: akceptuj płaski format {page, per_page, total, items} i mapuj do {meta, items}
+const adaptArticleList = (data: any) => {
+  if (
+    data &&
+    !('meta' in data) &&
+    Array.isArray((data as any).items) &&
+    typeof (data as any).page === 'number' &&
+    typeof (data as any).per_page === 'number' &&
+    typeof (data as any).total === 'number'
+  ) {
+    const page = (data as any).page;
+    const per_page = Math.max(1, (data as any).per_page | 0) || 10;
+    const total_items = (data as any).total;
+    const total_pages = Math.max(1, Math.ceil(total_items / per_page));
+    return { meta: { page, per_page, total_items, total_pages }, items: (data as any).items };
+  }
+  return data;
+};
+
+
 export const healthResponseSchema = z.object({
   status: z.string(),
   db: z.string().optional().default('unknown'),
@@ -67,10 +87,14 @@ export const paginationMetaSchema = z.object({
 
 export type PaginationMeta = z.infer<typeof paginationMetaSchema>;
 
-export const articleListResponseSchema = z.object({
-  meta: paginationMetaSchema,
-  items: z.array(articleSummarySchema)
-});
+export const articleListResponseSchema = z.preprocess(
+  adaptArticleList,
+  z.object({
+    meta: paginationMetaSchema,
+    items: z.array(articleSummarySchema)
+  })
+);
+
 
 export type ArticleListResponse = z.infer<typeof articleListResponseSchema>;
 
