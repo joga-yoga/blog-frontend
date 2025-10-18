@@ -19,8 +19,6 @@ type SearchFormState = {
   limit: string;
   minDuration: string;
   maxDuration: string;
-  region: string;
-  language: string;
 };
 
 type SearchResultItem = {
@@ -187,10 +185,13 @@ function normalizeSearchResults(data: unknown): SearchResultItem[] {
       const publishedAt = typeof record.published_at === "string" ? record.published_at : null;
       const descriptionSnippet =
         typeof record.description_snippet === "string" ? record.description_snippet : "";
+      const hasTranscriptRaw = record.has_transcript as unknown;
       const hasTranscript =
-        typeof record.has_transcript === "boolean"
-          ? record.has_transcript
-          : null;
+        typeof hasTranscriptRaw === "boolean"
+          ? hasTranscriptRaw
+          : hasTranscriptRaw === null
+            ? null
+            : null;
       const videoId = typeof record.video_id === "string" && record.video_id.trim() ? record.video_id : null;
 
       return {
@@ -217,8 +218,6 @@ const INITIAL_FORM_STATE: SearchFormState = {
   limit: "50",
   minDuration: "600",
   maxDuration: "10800",
-  region: "PL",
-  language: "any",
 };
 
 const AdminAppPage = () => {
@@ -451,8 +450,6 @@ const AdminAppPage = () => {
       limit: parseIntOrFallback(formState.limit, 50),
       min_duration_seconds: parseIntOrFallback(formState.minDuration, 600),
       max_duration_seconds: parseIntOrFallback(formState.maxDuration, 10800),
-      region: formState.region.trim() || "PL",
-      language: formState.language.trim() || "any",
     };
 
     try {
@@ -462,7 +459,7 @@ const AdminAppPage = () => {
       setSelectedUrls(new Set());
 
       if (items.length === 0) {
-        setSearchFeedback({ type: "error", message: "No results found for this query." });
+        setSearchFeedback({ type: "error", message: "No results found." });
       } else {
         setSearchFeedback({ type: "success", message: `Found ${items.length} result${items.length === 1 ? "" : "s"}.` });
       }
@@ -721,38 +718,8 @@ const AdminAppPage = () => {
                       className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                     />
                   </label>
-                  <label className="flex flex-col gap-1 text-sm">
-                    <span className="font-medium text-slate-700">Region</span>
-                    <input
-                      type="text"
-                      value={formState.region}
-                      onChange={(event) => handleFormChange("region", event.target.value)}
-                      className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1 text-sm">
-                    <span className="font-medium text-slate-700">Language</span>
-                    <input
-                      type="text"
-                      value={formState.language}
-                      onChange={(event) => handleFormChange("language", event.target.value)}
-                      className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                    />
-                  </label>
                 </div>
-                {searchError ? (
-                  <p className="text-sm text-red-600">{searchError}</p>
-                ) : null}
-                {searchFeedback ? (
-                  <p
-                    className={`text-sm ${
-                      searchFeedback.type === "success" ? "text-green-600" : "text-slate-600"
-                    }`}
-                  >
-                    {searchFeedback.message}
-                  </p>
-                ) : null}
-                <div>
+                <div className="flex flex-col gap-2">
                   <button
                     type="submit"
                     className="inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
@@ -760,6 +727,18 @@ const AdminAppPage = () => {
                   >
                     {searchLoading ? "Searching…" : "Search"}
                   </button>
+                  {searchError ? (
+                    <p className="text-sm text-red-600">Search failed: {searchError}</p>
+                  ) : null}
+                  {searchFeedback ? (
+                    <p
+                      className={`text-sm ${
+                        searchFeedback.type === "success" ? "text-green-600" : "text-slate-600"
+                      }`}
+                    >
+                      {searchFeedback.message}
+                    </p>
+                  ) : null}
                 </div>
               </form>
             </div>
@@ -819,7 +798,7 @@ const AdminAppPage = () => {
                     <tr>
                       <td colSpan={8} className="px-3 py-8 text-center text-sm text-slate-500">
                         {searchAttempted
-                          ? "No results to display. Run a search to see matches."
+                          ? "No results found."
                           : "Use the search above to find videos."}
                       </td>
                     </tr>
@@ -864,7 +843,7 @@ const AdminAppPage = () => {
                           <td className="px-3 py-3 align-top text-slate-700">{formatDuration(item.durationSeconds)}</td>
                           <td className="px-3 py-3 align-top text-slate-700">{formatDate(item.publishedAt)}</td>
                           <td className="px-3 py-3 align-top text-slate-700">
-                            {item.hasTranscript === null ? "Unknown" : item.hasTranscript ? "Yes" : "No"}
+                            {item.hasTranscript == null ? "Unknown" : item.hasTranscript ? "Yes" : "No"}
                           </td>
                           <td className="px-3 py-3 align-top text-slate-600">
                             <p
