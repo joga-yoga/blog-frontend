@@ -208,9 +208,30 @@ function normalizeSearchResults(data: unknown): SearchResultItem[] {
     .filter((item): item is SearchResultItem => Boolean(item));
 }
 
-function parseIntOrFallback(value: string, fallback: number): number {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? parsed : fallback;
+type ParseNumberOptions = {
+  min?: number;
+  max?: number;
+};
+
+function parseNumberOrFallback(value: string, fallback: number, options: ParseNumberOptions = {}): number {
+  const parsed = Number(value);
+
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+
+  const { min, max } = options;
+  let normalized = parsed;
+
+  if (typeof min === "number" && Number.isFinite(min)) {
+    normalized = Math.max(normalized, min);
+  }
+
+  if (typeof max === "number" && Number.isFinite(max)) {
+    normalized = Math.min(normalized, max);
+  }
+
+  return normalized;
 }
 
 const INITIAL_FORM_STATE: SearchFormState = {
@@ -447,9 +468,9 @@ const AdminAppPage = () => {
 
     const payload = {
       query: formState.query.trim(),
-      limit: parseIntOrFallback(formState.limit, 50),
-      min_duration_seconds: parseIntOrFallback(formState.minDuration, 600),
-      max_duration_seconds: parseIntOrFallback(formState.maxDuration, 10800),
+      limit: parseNumberOrFallback(formState.limit, 50, { min: 1, max: 100 }),
+      min_duration_seconds: parseNumberOrFallback(formState.minDuration, 600, { min: 0 }),
+      max_duration_seconds: parseNumberOrFallback(formState.maxDuration, 10800, { min: 0 }),
     };
 
     try {
@@ -693,6 +714,7 @@ const AdminAppPage = () => {
                     <input
                       type="number"
                       min={1}
+                      max={100}
                       value={formState.limit}
                       onChange={(event) => handleFormChange("limit", event.target.value)}
                       className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
@@ -789,7 +811,7 @@ const AdminAppPage = () => {
                     <th className="border-b border-slate-200 px-3 py-2">Channel</th>
                     <th className="border-b border-slate-200 px-3 py-2">Duration</th>
                     <th className="border-b border-slate-200 px-3 py-2">Published</th>
-                    <th className="border-b border-slate-200 px-3 py-2">Transcript</th>
+                    <th className="border-b border-slate-200 px-3 py-2">Has Transcript</th>
                     <th className="border-b border-slate-200 px-3 py-2">Description</th>
                   </tr>
                 </thead>
