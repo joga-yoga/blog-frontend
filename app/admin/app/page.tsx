@@ -26,6 +26,8 @@ type SearchFormState = {
   features: SearchFeature[];
 };
 
+type TranscriptStatus = "yes" | "no" | "unknown";
+
 type SearchResultItem = {
   videoId: string | null;
   url: string;
@@ -34,7 +36,7 @@ type SearchResultItem = {
   durationSeconds: number | null;
   publishedAt: string | null;
   descriptionSnippet: string;
-  hasTranscript: boolean | null;
+  transcriptStatus: TranscriptStatus;
 };
 
 type StatusSummary = {
@@ -77,6 +79,65 @@ function getErrorMessage(error: unknown, fallback = "Something went wrong."): st
 
   return fallback;
 }
+
+function toTranscriptStatus(value: unknown): TranscriptStatus {
+  if (value === true) {
+    return "yes";
+  }
+
+  if (value === false) {
+    return "no";
+  }
+
+  return "unknown";
+}
+
+const transcriptStatusLabels: Record<TranscriptStatus, string> = {
+  yes: "Yes",
+  no: "No",
+  unknown: "Unknown",
+};
+
+function extractChannelName(raw: string): string {
+  const trimmed = raw.trim();
+
+  if (!trimmed) {
+    return "Unknown channel";
+  }
+
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    const normalized = trimmed.replace(/'/g, '"');
+
+    try {
+      const parsed = JSON.parse(normalized);
+
+      if (parsed && typeof parsed === "object") {
+        const record = parsed as Record<string, unknown>;
+        const candidate = [record.name, record.title, record.channel]
+          .map((value) => (typeof value === "string" ? value.trim() : ""))
+          .find((value) => value);
+
+        if (candidate) {
+          return candidate;
+        }
+      }
+    } catch (error) {
+      const match = trimmed.match(/name["']?\s*[:=]\s*["']([^"'}]+)["']/i);
+      if (match?.[1]) {
+        return match[1].trim();
+      }
+    }
+
+    const fallbackMatch = trimmed.match(/"?name"?\s*[:=]\s*"?([^"'}]+)"?/i);
+    if (fallbackMatch?.[1]) {
+      return fallbackMatch[1].trim();
+    }
+  }
+
+  return trimmed;
+}
+
+const isItemSelectable = (item: SearchResultItem) => Boolean(item.url && item.videoId);
 
 function formatDuration(value: number | null): string {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
@@ -185,18 +246,13 @@ function normalizeSearchResults(data: unknown): SearchResultItem[] {
       }
 
       const title = typeof record.title === "string" && record.title.trim() ? record.title : "Untitled video";
-      const channel = typeof record.channel === "string" && record.channel.trim() ? record.channel : "Unknown channel";
+      const rawChannel = typeof record.channel === "string" ? record.channel : "";
+      const channel = rawChannel ? extractChannelName(rawChannel) : "Unknown channel";
       const durationSeconds = typeof record.duration_seconds === "number" ? record.duration_seconds : null;
       const publishedAt = typeof record.published_at === "string" ? record.published_at : null;
       const descriptionSnippet =
         typeof record.description_snippet === "string" ? record.description_snippet : "";
-      const hasTranscriptRaw = record.has_transcript as unknown;
-      const hasTranscript =
-        typeof hasTranscriptRaw === "boolean"
-          ? hasTranscriptRaw
-          : hasTranscriptRaw === null
-            ? null
-            : null;
+      const transcriptStatus = toTranscriptStatus(record.has_transcript);
       const videoId = typeof record.video_id === "string" && record.video_id.trim() ? record.video_id : null;
 
       return {
@@ -207,7 +263,7 @@ function normalizeSearchResults(data: unknown): SearchResultItem[] {
         durationSeconds,
         publishedAt,
         descriptionSnippet,
-        hasTranscript,
+        transcriptStatus,
       } satisfies SearchResultItem;
     })
     .filter((item): item is SearchResultItem => Boolean(item));
@@ -263,6 +319,8 @@ const AdminAppPage = () => {
   const [searchFeedback, setSearchFeedback] = useState<Feedback | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchAttempted, setSearchAttempted] = useState(false);
+  const [transcriptStatusByUrl, setTranscriptStatusByUrl] = useState<Record<string, TranscriptStatus>>({});
+  const [probeTrigger, setProbeTrigger] = useState(0);
 
   const [selectedUrls, setSelectedUrls] = useState<Set<string>>(() => new Set());
   const [queuePlanFeedback, setQueuePlanFeedback] = useState<Feedback | null>(null);
@@ -329,6 +387,7 @@ const AdminAppPage = () => {
       const headers = new Headers();
       headers.set("Accept", "application/json");
       headers.set("X-Admin-Token", token);
+      headers.set("Content-Type", "application/json");
 
       const init: RequestInit = {
         method,
@@ -336,7 +395,6 @@ const AdminAppPage = () => {
       };
 
       if (body !== undefined) {
-        headers.set("Content-Type", "application/json");
         init.body = JSON.stringify(body);
       }
 
@@ -433,23 +491,117 @@ const AdminAppPage = () => {
       const next = new Set<string>();
 
       for (const item of searchResults) {
-        if (previous.has(item.url)) {
+        if (previous.has(item.url) && isItemSelectable(item)) {
           next.add(item.url);
         }
+      }
+
+      if (next.size === previous.size) {
+        return previous;
       }
 
       return next;
     });
   }, [searchResults]);
 
+  const selectableResults = useMemo(
+    () => searchResults.filter((item) => isItemSelectable(item)),
+    [searchResults]
+  );
+
+  const resultUrls = useMemo(() => {
+    const seen = new Set<string>();
+    const urls: string[] = [];
+
+    for (const item of searchResults) {
+      if (item.url && !seen.has(item.url)) {
+        seen.add(item.url);
+        urls.push(item.url);
+      }
+    }
+
+    return urls;
+  }, [searchResults]);
+
+  useEffect(() => {
+    if (!apiBaseUrl || !token) {
+      return;
+    }
+
+    if (probeTrigger === 0) {
+      return;
+    }
+
+    if (resultUrls.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const resultUrlSet = new Set(resultUrls);
+
+    const runProbe = async () => {
+      try {
+        const response = await apiFetch<{ has?: Record<string, boolean | null> }>(
+          "/admin/probe_transcripts",
+          { method: "POST", body: { urls: resultUrls } }
+        );
+
+        if (!response || typeof response !== "object" || cancelled) {
+          return;
+        }
+
+        const hasRecord = response.has && typeof response.has === "object" ? response.has : null;
+
+        if (!hasRecord) {
+          return;
+        }
+
+        const entries = Object.entries(hasRecord as Record<string, unknown>);
+
+        if (entries.length === 0) {
+          return;
+        }
+
+        setTranscriptStatusByUrl((previous) => {
+          let changed = false;
+          const next: Record<string, TranscriptStatus> = { ...previous };
+
+          for (const [url, value] of entries) {
+            if (!resultUrlSet.has(url)) {
+              continue;
+            }
+
+            const status = toTranscriptStatus(value);
+
+            if (next[url] !== status) {
+              next[url] = status;
+              changed = true;
+            }
+          }
+
+          return changed ? next : previous;
+        });
+      } catch (error) {
+        // Endpoint might be unavailable; keep "Unknown" without surfacing an error.
+      }
+    };
+
+    void runProbe();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBaseUrl, token, apiFetch, resultUrls, probeTrigger]);
+
   const selectedItems = useMemo(
-    () => searchResults.filter((item) => selectedUrls.has(item.url)),
-    [searchResults, selectedUrls]
+    () => selectableResults.filter((item) => selectedUrls.has(item.url)),
+    [selectableResults, selectedUrls]
   );
 
   const allResultsSelected = useMemo(
-    () => searchResults.length > 0 && searchResults.every((item) => selectedUrls.has(item.url)),
-    [searchResults, selectedUrls]
+    () => selectableResults.length > 0 && selectedItems.length === selectableResults.length,
+    [selectableResults.length, selectedItems.length]
   );
 
   const selectedCount = selectedItems.length;
@@ -524,6 +676,12 @@ const AdminAppPage = () => {
       const data = await apiFetch<unknown>("/admin/search", { method: "POST", body: payload });
       const items = normalizeSearchResults(data);
       setSearchResults(items);
+      const initialStatusMap: Record<string, TranscriptStatus> = {};
+      for (const item of items) {
+        initialStatusMap[item.url] = item.transcriptStatus;
+      }
+      setTranscriptStatusByUrl(initialStatusMap);
+      setProbeTrigger((count) => count + 1);
       setSelectedUrls(new Set());
 
       if (items.length === 0) {
@@ -544,19 +702,34 @@ const AdminAppPage = () => {
       return;
     }
 
-    setSelectedUrls(new Set(searchResults.map((item) => item.url)));
+    if (selectableResults.length === 0) {
+      setSelectedUrls(new Set());
+      return;
+    }
+
+    setSelectedUrls(new Set(selectableResults.map((item) => item.url)));
   };
 
   const toggleSelection = (url: string, checked: boolean) => {
-    setSelectedUrls((previous) => {
-      const next = new Set(previous);
+    const selectableItem = searchResults.find((item) => item.url === url && isItemSelectable(item));
 
+    setSelectedUrls((previous) => {
       if (checked) {
+        if (!selectableItem || previous.has(url)) {
+          return previous;
+        }
+
+        const next = new Set(previous);
         next.add(url);
-      } else {
-        next.delete(url);
+        return next;
       }
 
+      if (!previous.has(url)) {
+        return previous;
+      }
+
+      const next = new Set(previous);
+      next.delete(url);
       return next;
     });
   };
@@ -567,21 +740,30 @@ const AdminAppPage = () => {
       return;
     }
 
+    const urls = Array.from(new Set(selectedItems.map((item) => item.url).filter(Boolean)));
+
+    if (urls.length === 0) {
+      setQueuePlanFeedback({ type: "error", message: "No valid videos selected for queueing." });
+      return;
+    }
+
     setQueuePlanLoading(true);
     setQueuePlanFeedback(null);
 
     try {
       await apiFetch("/admin/queue/plan", {
         method: "POST",
-        body: { urls: selectedItems.map((item) => item.url) },
+        body: { urls },
       });
 
+      const total = urls.length;
       setQueuePlanFeedback({
         type: "success",
-        message: `Queued ${selectedCount} item${selectedCount === 1 ? "" : "s"}.`,
+        message: `Queued ${total} item${total === 1 ? "" : "s"}.`,
       });
       setSelectedUrls(new Set());
       await refreshQueue();
+      await refreshStatus();
     } catch (error) {
       setQueuePlanFeedback({ type: "error", message: getErrorMessage(error) });
     } finally {
@@ -589,10 +771,7 @@ const AdminAppPage = () => {
     }
   };
 
-  const runControlAction = async (
-    action: "start" | "stop" | "clear" | "generate",
-    request: () => Promise<void>
-  ) => {
+  const runControlAction = async (action: "start" | "stop" | "clear", request: () => Promise<void>) => {
     setActiveControl(action);
     setControlsFeedback(null);
 
@@ -640,19 +819,51 @@ const AdminAppPage = () => {
       return;
     }
 
-    void runControlAction("generate", async () => {
-      await apiFetch("/admin/generate_now", { method: "POST", body: { url } });
-    });
+    setActiveControl("generate");
+    setControlsFeedback(null);
+
+    void (async () => {
+      try {
+        const response = await apiFetch<{ accepted: boolean; article_id?: number; reason?: string }>(
+          "/admin/generate_now",
+          { method: "POST", body: { url } }
+        );
+
+        if (response?.accepted) {
+          const articleId =
+            typeof response.article_id === "number" && Number.isFinite(response.article_id)
+              ? response.article_id
+              : null;
+          setControlsFeedback({
+            type: "success",
+            message: articleId
+              ? `Generation accepted. Article #${articleId}.`
+              : "Generation accepted.",
+          });
+        } else {
+          const reason = typeof response?.reason === "string" && response.reason.trim() ? response.reason.trim() : null;
+          setControlsFeedback({
+            type: "error",
+            message: reason ? `Generate request rejected: ${reason}` : "Generate request was not accepted.",
+          });
+        }
+
+        await refreshStatus();
+        await refreshQueue();
+      } catch (error) {
+        setControlsFeedback({ type: "error", message: getErrorMessage(error) });
+      } finally {
+        setActiveControl(null);
+      }
+    })();
   };
 
   if (apiBaseUrlError) {
     return (
-      <main className="min-h-screen bg-slate-50 p-6">
-        <div className="mx-auto max-w-5xl">
-          <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-red-700">
-            <h1 className="text-lg font-semibold">Configuration error</h1>
-            <p className="mt-2 text-sm leading-6">{apiBaseUrlError}</p>
-          </div>
+      <main className="min-h-screen w-full bg-slate-50 px-6 py-6">
+        <div className="w-full rounded-lg border border-red-200 bg-red-50 p-6 text-red-700">
+          <h1 className="text-lg font-semibold">Configuration error</h1>
+          <p className="mt-2 text-sm leading-6">{apiBaseUrlError}</p>
         </div>
       </main>
     );
@@ -660,8 +871,8 @@ const AdminAppPage = () => {
 
   if (!tokenChecked) {
     return (
-      <main className="min-h-screen bg-slate-50 p-6">
-        <div className="mx-auto max-w-5xl text-sm text-slate-600">Loading…</div>
+      <main className="min-h-screen w-full bg-slate-50 px-6 py-6">
+        <div className="text-sm text-slate-600">Loading…</div>
       </main>
     );
   }
@@ -690,8 +901,8 @@ const AdminAppPage = () => {
   }
 
   return (
-    <main className="min-h-screen bg-slate-50 p-6">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6">
+    <main className="min-h-screen w-full bg-slate-50 px-6 py-6">
+      <div className="flex w-full flex-col gap-6">
         <header className="flex flex-col gap-4 rounded-lg border border-slate-200 bg-white p-6 shadow-sm sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-slate-900">Auto-Generator Console</h1>
@@ -841,8 +1052,11 @@ const AdminAppPage = () => {
         </section>
 
         <section className="rounded-lg border border-slate-200 bg-white shadow-sm">
-          <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-6 py-4">
-            <h2 className="text-lg font-semibold text-slate-900">Results</h2>
+          <header className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 px-6 py-4">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Results</h2>
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Found: {searchResults.length}</p>
+            </div>
             <div className="flex flex-wrap items-center gap-4">
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input
@@ -850,14 +1064,14 @@ const AdminAppPage = () => {
                   className="h-4 w-4 rounded border-slate-300"
                   checked={allResultsSelected}
                   onChange={(event) => toggleSelectAll(event.target.checked)}
-                  disabled={searchResults.length === 0}
+                  disabled={selectableResults.length === 0}
                 />
                 Select all
               </label>
               <button
                 type="button"
                 onClick={handleAddToQueue}
-                disabled={queuePlanLoading || searchResults.length === 0 || selectedCount === 0}
+                disabled={queuePlanLoading || selectableResults.length === 0 || selectedCount === 0}
                 className="inline-flex items-center justify-center rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {queuePlanLoading ? "Adding…" : "Add selected to queue"}
@@ -900,6 +1114,15 @@ const AdminAppPage = () => {
                   ) : (
                     searchResults.map((item) => {
                       const checked = selectedUrls.has(item.url);
+                      const selectable = isItemSelectable(item);
+                      const transcriptStatus = transcriptStatusByUrl[item.url] ?? item.transcriptStatus;
+                      const transcriptLabel = transcriptStatusLabels[transcriptStatus];
+                      const transcriptTone =
+                        transcriptStatus === "yes"
+                          ? "text-green-600"
+                          : transcriptStatus === "no"
+                            ? "text-red-600"
+                            : "text-slate-600";
 
                       return (
                         <tr key={item.url} className="border-b border-slate-100 last:border-0">
@@ -909,6 +1132,8 @@ const AdminAppPage = () => {
                               className="h-4 w-4 rounded border-slate-300"
                               checked={checked}
                               onChange={(event) => toggleSelection(item.url, event.target.checked)}
+                              disabled={!selectable}
+                              aria-disabled={!selectable}
                             />
                           </td>
                           <td className="px-3 py-3 align-top">
@@ -937,21 +1162,11 @@ const AdminAppPage = () => {
                           <td className="px-3 py-3 align-top text-slate-700">{item.channel}</td>
                           <td className="px-3 py-3 align-top text-slate-700">{formatDuration(item.durationSeconds)}</td>
                           <td className="px-3 py-3 align-top text-slate-700">{formatDate(item.publishedAt)}</td>
-                          <td className="px-3 py-3 align-top text-slate-700">
-                            {item.hasTranscript == null ? "Unknown" : item.hasTranscript ? "Yes" : "No"}
+                          <td className={`px-3 py-3 align-top font-medium ${transcriptTone}`}>
+                            {transcriptLabel}
                           </td>
                           <td className="px-3 py-3 align-top text-slate-600">
-                            <p
-                              className="whitespace-pre-wrap"
-                              style={{
-                                display: "-webkit-box",
-                                WebkitLineClamp: 2,
-                                WebkitBoxOrient: "vertical",
-                                overflow: "hidden",
-                              }}
-                            >
-                              {item.descriptionSnippet || "—"}
-                            </p>
+                            <p className="line-clamp-2 whitespace-pre-line">{item.descriptionSnippet || "—"}</p>
                           </td>
                         </tr>
                       );
