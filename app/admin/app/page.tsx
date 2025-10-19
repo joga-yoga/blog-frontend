@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { FormEvent } from "react";
+import type { ChangeEvent, FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 class AdminApiError extends Error {
@@ -14,11 +14,16 @@ class AdminApiError extends Error {
   }
 }
 
+type SearchType = "video" | "channel" | "playlist" | "movie";
+type SearchDuration = "short" | "medium" | "long";
+type SearchFeature = "subtitles" | "location";
+
 type SearchFormState = {
   query: string;
   limit: string;
-  minDuration: string;
-  maxDuration: string;
+  type: SearchType;
+  duration: SearchDuration;
+  features: SearchFeature[];
 };
 
 type SearchResultItem = {
@@ -234,11 +239,16 @@ function parseNumberOrFallback(value: string, fallback: number, options: ParseNu
   return normalized;
 }
 
+const SEARCH_TYPES: SearchType[] = ["video", "channel", "playlist", "movie"];
+const SEARCH_DURATIONS: SearchDuration[] = ["short", "medium", "long"];
+const SEARCH_FEATURES: SearchFeature[] = ["subtitles", "location"];
+
 const INITIAL_FORM_STATE: SearchFormState = {
   query: "",
-  limit: "50",
-  minDuration: "600",
-  maxDuration: "10800",
+  limit: "5",
+  type: "video",
+  duration: "medium",
+  features: [],
 };
 
 const AdminAppPage = () => {
@@ -444,11 +454,41 @@ const AdminAppPage = () => {
 
   const selectedCount = selectedItems.length;
 
-  const handleFormChange = (field: keyof SearchFormState, value: string) => {
+  const handleInputChange = (field: "query" | "limit") => (event: ChangeEvent<HTMLInputElement>) => {
     setFormState((previous) => ({
       ...previous,
-      [field]: value,
+      [field]: event.target.value,
     }));
+  };
+
+  const handleTypeChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const value = event.target.value as SearchType;
+    setFormState((previous) => ({
+      ...previous,
+      type: SEARCH_TYPES.includes(value) ? value : "video",
+    }));
+  };
+
+  const handleDurationChange = (event: ChangeEvent<HTMLSelectElement>) => {
+    const value = event.target.value as SearchDuration;
+    setFormState((previous) => ({
+      ...previous,
+      duration: SEARCH_DURATIONS.includes(value) ? value : "medium",
+    }));
+  };
+
+  const toggleFeature = (feature: SearchFeature) => {
+    setFormState((previous) => {
+      const hasFeature = previous.features.includes(feature);
+      const nextFeatures = hasFeature
+        ? previous.features.filter((item) => item !== feature)
+        : [...previous.features, feature];
+
+      return {
+        ...previous,
+        features: nextFeatures.filter((item): item is SearchFeature => SEARCH_FEATURES.includes(item)),
+      };
+    });
   };
 
   const handleSearch = async (event: FormEvent<HTMLFormElement>) => {
@@ -466,11 +506,18 @@ const AdminAppPage = () => {
     setSearchFeedback(null);
     setSearchAttempted(true);
 
+    const sanitizedType = SEARCH_TYPES.includes(formState.type) ? formState.type : "video";
+    const sanitizedDuration = SEARCH_DURATIONS.includes(formState.duration) ? formState.duration : "medium";
+    const sanitizedFeatures = formState.features.filter((feature): feature is SearchFeature =>
+      SEARCH_FEATURES.includes(feature)
+    );
+
     const payload = {
       query: formState.query.trim(),
-      limit: parseNumberOrFallback(formState.limit, 50, { min: 1, max: 100 }),
-      min_duration_seconds: parseNumberOrFallback(formState.minDuration, 600, { min: 0 }),
-      max_duration_seconds: parseNumberOrFallback(formState.maxDuration, 10800, { min: 0 }),
+      limit: parseNumberOrFallback(formState.limit, 5, { min: 1, max: 100 }),
+      type: sanitizedType,
+      duration: sanitizedDuration,
+      features: sanitizedFeatures,
     };
 
     try {
@@ -480,7 +527,7 @@ const AdminAppPage = () => {
       setSelectedUrls(new Set());
 
       if (items.length === 0) {
-        setSearchFeedback({ type: "error", message: "No results found." });
+        setSearchFeedback(null);
       } else {
         setSearchFeedback({ type: "success", message: `Found ${items.length} result${items.length === 1 ? "" : "s"}.` });
       }
@@ -699,47 +746,73 @@ const AdminAppPage = () => {
               <form onSubmit={handleSearch} className="flex flex-col gap-6">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
                   <label className="flex flex-col gap-1 text-sm">
-                    <span className="font-medium text-slate-700">Query</span>
+                    <span className="font-medium text-slate-700">Search query</span>
                     <input
                       type="text"
                       value={formState.query}
-                      onChange={(event) => handleFormChange("query", event.target.value)}
+                      onChange={handleInputChange("query")}
                       className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                       placeholder="e.g. yoga for spine"
                       required
                     />
                   </label>
                   <label className="flex flex-col gap-1 text-sm">
-                    <span className="font-medium text-slate-700">Limit</span>
+                    <span className="font-medium text-slate-700">Limit (default 5)</span>
                     <input
                       type="number"
                       min={1}
                       max={100}
                       value={formState.limit}
-                      onChange={(event) => handleFormChange("limit", event.target.value)}
+                      onChange={handleInputChange("limit")}
                       className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
                     />
                   </label>
                   <label className="flex flex-col gap-1 text-sm">
-                    <span className="font-medium text-slate-700">Min duration (sec)</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={formState.minDuration}
-                      onChange={(event) => handleFormChange("minDuration", event.target.value)}
+                    <span className="font-medium text-slate-700">Type</span>
+                    <select
+                      value={formState.type}
+                      onChange={handleTypeChange}
                       className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                    />
+                    >
+                      {SEARCH_TYPES.map((searchType) => (
+                        <option key={searchType} value={searchType}>
+                          {searchType.charAt(0).toUpperCase() + searchType.slice(1)}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   <label className="flex flex-col gap-1 text-sm">
-                    <span className="font-medium text-slate-700">Max duration (sec)</span>
-                    <input
-                      type="number"
-                      min={0}
-                      value={formState.maxDuration}
-                      onChange={(event) => handleFormChange("maxDuration", event.target.value)}
+                    <span className="font-medium text-slate-700">Duration</span>
+                    <select
+                      value={formState.duration}
+                      onChange={handleDurationChange}
                       className="rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                    />
+                    >
+                      <option value="short">Short (&lt;4 min)</option>
+                      <option value="medium">Medium (4–20 min)</option>
+                      <option value="long">Long (&gt;20 min)</option>
+                    </select>
                   </label>
+                  <fieldset className="flex flex-col gap-2 text-sm">
+                    <legend className="font-medium text-slate-700">Features</legend>
+                    <div className="flex flex-col gap-2">
+                      {SEARCH_FEATURES.map((feature) => {
+                        const id = `feature-${feature}`;
+                        return (
+                          <label key={feature} htmlFor={id} className="flex items-center gap-2 text-slate-700">
+                            <input
+                              id={id}
+                              type="checkbox"
+                              checked={formState.features.includes(feature)}
+                              onChange={() => toggleFeature(feature)}
+                              className="h-4 w-4 rounded border-slate-300"
+                            />
+                            <span className="capitalize">{feature}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </fieldset>
                 </div>
                 <div className="flex flex-col gap-2">
                   <button
