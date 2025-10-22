@@ -188,13 +188,18 @@ function ArticleList({ articles, query }: { articles: ArticleListResponse; query
               {post.updated_at ? `Zaktualizowano ${formatDate(post.updated_at)}` : `Opublikowano ${formatDate(post.created_at)}`}
             </p>
             {post.tags.length > 0 ? (
-              <ul className="flex flex-wrap gap-2 text-sm text-blue-700">
-                {post.tags.slice(0, 6).map((tag) => (
-                  <li key={`${post.slug}-${tag}`} className="rounded-full bg-blue-100 px-3 py-1">
-                    <Link href={buildQueryString(query, { page: 1, q: tag })}>#{tag}</Link>
-                  </li>
-                ))}
-              </ul>
+            <ul className="flex flex-wrap gap-2 text-sm">
+              {post.tags.slice(0, 6).map((tag) => (
+                <li key={`${post.slug}-${tag}`} className="rounded-full bg-slate-100 px-3 py-1">
+                  <Link
+                    href={buildQueryString(query, { page: 1, q: tag })}
+                    className="!text-white no-underline hover:no-underline"
+                  >
+                    #{tag}
+                  </Link>
+                </li>
+              ))}
+            </ul>
             ) : null}
           </div>
           <footer className="mt-6 text-sm text-gray-500">Opublikowano {formatDate(post.created_at)}</footer>

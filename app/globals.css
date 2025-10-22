@@ -14,12 +14,21 @@ body {
 }
 
 a {
-  @apply text-blue-600 underline-offset-2 transition hover:underline;
+  @apply text-blue-500 underline-offset-2 transition hover:underline;
+
+  
 }
 
 .prose :where(a):not(:where([class~="not-prose"] *)) {
-  @apply text-blue-600 font-medium underline-offset-4 hover:underline;
+  @apply text-blue-500 font-medium underline-offset-4 hover:underline;
 }
+
+@layer components {
+  .rounded-full.px-3.py-1 > a {
+    @apply !text-black no-underline hover:no-underline;
+  }
+}
+
 
 .line-clamp-3 {
   display: -webkit-box;
