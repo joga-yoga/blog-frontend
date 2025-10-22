@@ -183,7 +183,8 @@ function ArticleList({ articles, query }: { articles: ArticleListResponse; query
                 {post.title}
               </Link>
             </h2>
-            <p className="line-clamp-3 text-base text-gray-600">
+            {post.lead ? <p className="line-clamp-3 text-base text-gray-700">{post.lead}</p> : null}
+            <p className="text-sm text-gray-500">
               {post.updated_at ? `Zaktualizowano ${formatDate(post.updated_at)}` : `Opublikowano ${formatDate(post.created_at)}`}
             </p>
             {post.tags.length > 0 ? (

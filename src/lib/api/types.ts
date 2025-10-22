@@ -42,11 +42,21 @@ const sectionValueSchema = z.union([z.string(), z.null(), z.undefined()]).transf
   return null as string | null;
 });
 
+const leadValueSchema = z.union([z.string(), z.null(), z.undefined()]).transform((value) => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+
+  return null as string | null;
+});
+
 export const articleSummarySchema = z
   .object({
     slug: z.string(),
     title: z.string(),
     section: sectionValueSchema.default(null),
+    lead: leadValueSchema.default(null),
     tags: tagsValueSchema.default([]),
     created_at: z.string(),
     updated_at: z.string()
