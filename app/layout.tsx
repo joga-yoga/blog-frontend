@@ -36,7 +36,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           </header>
           <main className="flex-1 pb-16">{children}</main>
           <footer className="mt-12 border-t border-gray-200 pt-6 text-sm text-gray-500">
-            © {new Date().getFullYear()} Blog. Wszelkie prawa zastrzeżone.
+            © {new Date().getFullYear()} Wszelkie prawa zastrzeżone. joga.yoga
           </footer>
         </div>
       </body>
