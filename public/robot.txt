@@ -1,0 +1,8 @@
+User-agent: *
+Disallow: /admin/
+Disallow: /preview/
+Disallow: /drafts/
+Allow: /
+
+Sitemap: https://wiedza.joga.yoga/sitemap.xml
+Host: wiedza.joga.yoga
