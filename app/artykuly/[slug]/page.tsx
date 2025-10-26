@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 import { Markdown } from '@/components/Markdown';
 import { getArticle, NotFoundError } from '@/lib/api/client';
 import type { ArticleCitation, ArticleDetailResponse, ArticleFaqItem } from '@/lib/api/types';
+import { getSiteBaseUrl } from '@/lib/site';
 
 export const revalidate = 600;
 
@@ -37,18 +38,23 @@ function mapFaq(items: ArticleFaqItem[]): ArticleFaqItem[] {
 function buildArticleJsonLd(article: ArticleDetailResponse) {
   const createdAt = article.created_at ?? article.updated_at ?? new Date().toISOString();
   const updatedAt = article.updated_at ?? createdAt;
+  const siteUrl = getSiteBaseUrl();
+  const fallbackCanonical = `${siteUrl}/artykuly/${article.slug}`;
+  const canonicalUrl = article.seo.canonical ?? fallbackCanonical;
 
   return {
     '@context': 'https://schema.org',
     '@type': 'Article',
     headline: article.article.headline,
     description: article.seo.description,
+    url: canonicalUrl,
     datePublished: new Date(createdAt).toISOString(),
     dateModified: new Date(updatedAt).toISOString(),
     inLanguage: article.locale,
+    keywords: article.taxonomy.tags,
     mainEntityOfPage: {
       '@type': 'WebPage',
-      '@id': article.seo.canonical ?? `/artykuly/${article.slug}`
+      '@id': canonicalUrl
     }
   };
 }
@@ -86,6 +92,9 @@ export async function generateMetadata({ params }: GenerateMetadataProps): Promi
 
   try {
     const article = await getArticle(slug, { revalidate });
+    const siteUrl = getSiteBaseUrl();
+    const fallbackCanonical = `${siteUrl}/artykuly/${article.slug}`;
+    const canonicalUrl = article.seo.canonical ?? fallbackCanonical;
     const createdAt = article.created_at ?? article.updated_at;
     const updatedAt = article.updated_at ?? article.created_at;
     const robotsValue = article.seo.robots?.toLowerCase() ?? '';
@@ -100,7 +109,7 @@ export async function generateMetadata({ params }: GenerateMetadataProps): Promi
       title: article.seo.title ?? article.article.headline,
       description: article.seo.description ?? article.article.lead,
       alternates: {
-        canonical: article.seo.canonical ?? `/artykuly/${article.slug}`
+        canonical: canonicalUrl
       },
       keywords: article.taxonomy.tags,
       openGraph: {
@@ -108,7 +117,7 @@ export async function generateMetadata({ params }: GenerateMetadataProps): Promi
         locale: article.locale,
         title: article.seo.title ?? article.article.headline,
         description: article.seo.description ?? article.article.lead,
-        url: article.seo.canonical ?? `/artykuly/${article.slug}`,
+        url: canonicalUrl,
         tags: article.taxonomy.tags,
         section: article.taxonomy.section,
         publishedTime: createdAt,

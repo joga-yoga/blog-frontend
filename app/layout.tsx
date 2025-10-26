@@ -9,7 +9,13 @@ export const metadata: Metadata = {
     template: '%s | joga.yoga – Blog o jodze, wellness i podróżach duchowych'
   },
   description:
-    'Polski blog o jodze i świadomym życiu. Poznaj inspirujące artykuły o jodze, medytacji, oddechu, wyjazdach jogowych i trendach wellness w Polsce i na świecie. Wiedza dla nauczycieli, praktykujących i miłośników zdrowego stylu życia.'
+    'Polski blog o jodze i świadomym życiu. Poznaj inspirujące artykuły o jodze, medytacji, oddechu, wyjazdach jogowych i trendach wellness w Polsce i na świecie. Wiedza dla nauczycieli, praktykujących i miłośników zdrowego stylu życia.',
+  alternates: {
+    types: {
+      'application/json': '/feed.json',
+      'application/atom+xml': '/feed.xml'
+    }
+  }
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
