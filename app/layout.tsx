@@ -3,7 +3,11 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import './globals.css';
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://wiedza.joga.yoga';
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
+
   title: {
     default: 'Blog joga.yoga – Wiedza, Inspiracje i Trendy Jogowe w Polsce',
     template: '%s | joga.yoga – Blog o jodze, wellness i podróżach duchowych'

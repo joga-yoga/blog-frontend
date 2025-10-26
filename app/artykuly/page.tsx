@@ -4,7 +4,7 @@ import { getArticles } from '@/lib/api/client';
 import type { ArticleListResponse } from '@/lib/api/types';
 import { getSiteBaseUrl } from '@/lib/site';
 
-export const revalidate = 300;
+export const revalidate = 60;
 
 const ARTICLES_PER_PAGE = 12;
 
