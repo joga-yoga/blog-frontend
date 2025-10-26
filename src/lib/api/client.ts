@@ -160,18 +160,18 @@ export async function getArticleSchema(options?: Pick<ApiRequestOptions, 'revali
 
 export async function getArticles(query: ArticleListQuery, options?: Pick<ApiRequestOptions, 'revalidate'>): Promise<ArticleListResponse> {
   const params = serializeArticleListQuery(query);
-  const data = await apiFetch<unknown>('/articles', { searchParams: params, revalidate: options?.revalidate });
+  const data = await apiFetch<unknown>('/artykuly', { searchParams: params, revalidate: options?.revalidate });
   return articleListResponseSchema.parse(data);
 }
 
 export async function getArticle(slug: string, options?: Pick<ApiRequestOptions, 'revalidate'>): Promise<ArticleDetailResponse> {
-  const data = await apiFetch<unknown>(`/articles/${encodeURIComponent(slug)}`, { revalidate: options?.revalidate });
+  const data = await apiFetch<unknown>(`/artykuly/${encodeURIComponent(slug)}`, { revalidate: options?.revalidate });
   return articleDetailResponseSchema.parse(data);
 }
 
 export async function createArticle(payload: ArticleCreateRequest): Promise<ArticlePublishResponse> {
   const body = articleCreateRequestSchema.parse(payload);
-  const data = await apiFetch<unknown>('/articles', {
+  const data = await apiFetch<unknown>('/artykuly', {
     method: 'POST',
     body: JSON.stringify(body)
   });
@@ -184,6 +184,6 @@ export async function getRubrics(options?: Pick<ApiRequestOptions, 'revalidate'>
 }
 
 export async function getArticlePreview(slug: string, options?: Pick<ApiRequestOptions, 'revalidate'>) {
-  const data = await apiFetch<unknown>(`/posts/${encodeURIComponent(slug)}`, { revalidate: options?.revalidate });
+  const data = await apiFetch<unknown>(`/artykuly/${encodeURIComponent(slug)}`, { revalidate: options?.revalidate });
   return articleDocumentSchema.parse(data);
 }

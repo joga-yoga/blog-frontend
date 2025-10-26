@@ -68,7 +68,7 @@ describe('ArticleGeneratorForm', () => {
   });
 
   it('pokazuje komunikat o niedostępności usługi', async () => {
-    mockedCreateArticle.mockRejectedValue(new ServiceUnavailableError(503, 'https://example.com/articles'));
+    mockedCreateArticle.mockRejectedValue(new ServiceUnavailableError(503, 'https://example.com/artykuly'));
 
     render(<ArticleGeneratorForm rubrics={[]} />);
 

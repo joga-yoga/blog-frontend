@@ -55,7 +55,7 @@ it('renders articles with pagination and tags', async () => {
 });
 
 it('shows service downtime message when backend fails', async () => {
-  mockedGetArticles.mockRejectedValue(new ServiceUnavailableError(503, 'https://example.com/articles'));
+  mockedGetArticles.mockRejectedValue(new ServiceUnavailableError(503, 'https://example.com/artykuly'));
   mockedGetHealth.mockResolvedValue({
     status: 'down',
     db: 'down',

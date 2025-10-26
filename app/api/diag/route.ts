@@ -25,7 +25,7 @@ export async function GET() {
   }
 
   out.checks.health = await probe('/health');
-  out.checks.articles = await probe('/articles?per_page=1&page=1');
+  out.checks.articles = await probe('/artykuly?per_page=1&page=1');
 
   return NextResponse.json(out);
 }

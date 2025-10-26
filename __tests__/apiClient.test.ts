@@ -23,8 +23,8 @@ describe('API client utilities', () => {
 
   it('builds URLs relative to the configured base', () => {
     process.env.NEXT_PUBLIC_API_BASE_URL = 'https://example.com/api';
-    const url = buildUrl('/articles', { page: 3, section: 'Finanse' });
-    expect(url.toString()).toBe('https://example.com/api/articles?page=3&section=Finanse');
+    const url = buildUrl('/artykuly', { page: 3, section: 'Finanse' });
+    expect(url.toString()).toBe('https://example.com/api/artykuly?page=3&section=Finanse');
   });
 
   it('adds JSON headers and parses responses', async () => {
@@ -79,6 +79,6 @@ describe('API client utilities', () => {
     expect(result.meta.total_items).toBe(1);
     expect(result.items[0].tags).toEqual(['a', 'b']);
     const [requestUrl] = (global.fetch as jest.Mock).mock.calls[0];
-    expect((requestUrl as URL).toString()).toBe('https://example.com/articles?page=1&per_page=10');
+    expect((requestUrl as URL).toString()).toBe('https://example.com/artykuly?page=1&per_page=10');
   });
 });
