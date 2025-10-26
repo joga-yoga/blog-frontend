@@ -43,3 +43,9 @@ npm run start
 ## Stylowanie
 
 Projekt korzysta z Tailwind CSS oraz wtyczki `@tailwindcss/typography`.
+
+## Testowanie integracji SEO
+
+- Feedy: `curl http://localhost:3000/feed.json` oraz `curl http://localhost:3000/feed.xml`
+- Pliki indeksujące: `curl http://localhost:3000/robots.txt` oraz `curl http://localhost:3000/sitemap.xml`
+- Ręczna inwalidacja cache po publikacji: `curl -X POST "http://localhost:3000/api/revalidate?tag=articles"`
