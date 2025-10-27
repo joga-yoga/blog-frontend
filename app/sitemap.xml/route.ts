@@ -1,5 +1,5 @@
 const BASE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://wiedza.joga.yoga';
-const API  = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://127.0.0.1:8000';
+const API  = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'https://api.joga.yoga';
 const PER_PAGE = 50;
 
 type ApiItem = {
