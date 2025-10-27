@@ -1,114 +1,90 @@
-import { NextResponse } from 'next/server';
-import { getArticles } from '@/lib/api/client';
-import { getSiteBaseUrl } from '@/lib/site';
-
+const BASE = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://wiedza.joga.yoga';
+const API  = process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://127.0.0.1:8000';
 const PER_PAGE = 50;
-export const revalidate = 3600;
 
-function escapeXml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
+type ApiItem = {
+  slug: string;
+  title: string;
+  section: string | null;
+  lead?: string | null;
+  tags: string[];
+  created_at: string; // ISO
+  updated_at: string; // ISO
+};
+
+type AnyResponse = {
+  items?: ApiItem[];
+  [k: string]: unknown;
+};
+
+function xmlEscape(s: string): string {
+  return s
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
 }
 
-export async function GET() {
-  const siteUrl = getSiteBaseUrl();
+function buildXml(urls: {
+  loc: string;
+  lastmod?: string;           // ISO 8601
+  changefreq?: 'always'|'hourly'|'daily'|'weekly'|'monthly'|'yearly'|'never';
+  priority?: number;          // 0.0 – 1.0
+}[]): string {
+  const items = urls.map(u => {
+    const parts = [
+      `<loc>${xmlEscape(u.loc)}</loc>`,
+      u.lastmod ? `<lastmod>${xmlEscape(u.lastmod)}</lastmod>` : '',
+      u.changefreq ? `<changefreq>${u.changefreq}</changefreq>` : '',
+      typeof u.priority === 'number' ? `<priority>${u.priority.toFixed(1)}</priority>` : '',
+    ].filter(Boolean).join('');
+    return `<url>${parts}</url>`;
+  }).join('');
 
-  try {
+  return `<?xml version="1.0" encoding="UTF-8"?>` +
+    `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` +
+    items +
+    `</urlset>`;
+}
 
-    const all = [];
-    let page = 1;
-    let latestUpdateISO: string | undefined;
+export async function GET(): Promise<Response> {
+  const nowIso = new Date().toISOString();
 
-    for (let safety = 0; safety < 400; safety++) { 
-      const data = await getArticles({ page, per_page: PER_PAGE }, { revalidate });
+  const urls: { loc: string; lastmod?: string; changefreq?: any; priority?: number }[] = [
+    { loc: `${BASE}/`,              lastmod: nowIso, changefreq: 'weekly', priority: 1.0 },
+    { loc: `${BASE}/privacy-policy`, lastmod: nowIso, changefreq: 'yearly', priority: 0.3 },
+  ];
 
+  let page = 1;
+  while (true) {
+    const res = await fetch(
+      `${API}/articles?page=${page}&per_page=${PER_PAGE}`,
+      { next: { revalidate: 60, tags: ['articles'] } }
+    );
+    if (!res.ok) break;
 
-      for (const item of data.items) {
-        const ts = item.updated_at || item.created_at;
-        if (ts && (!latestUpdateISO || new Date(ts) > new Date(latestUpdateISO))) {
-          latestUpdateISO = ts;
-        }
-      }
+    const data = (await res.json()) as AnyResponse;
+    const items = Array.isArray(data.items) ? data.items as ApiItem[] : [];
 
-      all.push(...data.items);
-
-
-      if (data.items.length < data.per_page) break;
-      page += 1;
+    for (const it of items) {
+      urls.push({
+        loc: `${BASE}/artykuly/${it.slug}`,
+        lastmod: new Date(it.updated_at ?? it.created_at).toISOString(),
+        changefreq: 'weekly',
+        priority: 0.8,
+      });
     }
 
-
-    const urls: Array<{ loc: string; lastmod?: string; changefreq?: string; priority?: string }> = [
-      {
-        loc: `${siteUrl}/`,
-        changefreq: 'daily',
-        priority: '1.0',
-        lastmod: latestUpdateISO ?? new Date().toISOString(),
-      },
-
-      {
-        loc: `${siteUrl}/artykuly`,
-        changefreq: 'daily',
-        priority: '0.9',
-        lastmod: latestUpdateISO ?? new Date().toISOString(),
-      },
-      ...all.map((item) => ({
-        loc: `${siteUrl}/artykuly/${item.slug}`,
-        lastmod: item.updated_at || item.created_at,
-        changefreq: 'weekly',
-        priority: '0.8',
-      })),
-    ];
-
-
-    const body = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${urls
-  .map((entry) => {
-    const parts = [`  <url>`, `    <loc>${escapeXml(entry.loc)}</loc>`];
-    if (entry.lastmod) parts.push(`    <lastmod>${new Date(entry.lastmod).toISOString()}</lastmod>`);
-    if (entry.changefreq) parts.push(`    <changefreq>${entry.changefreq}</changefreq>`);
-    if (entry.priority) parts.push(`    <priority>${entry.priority}</priority>`);
-    parts.push('  </url>');
-    return parts.join('\n');
-  })
-  .join('\n')}
-</urlset>`;
-
-    return new NextResponse(body, {
-      headers: {
-        'Content-Type': 'application/xml; charset=utf-8',
-
-        'Cache-Control': 's-maxage=3600, stale-while-revalidate=600',
-      },
-    });
-  } catch (err) {
-
-    const now = new Date().toISOString();
-    const fallback = `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>${escapeXml(`${siteUrl}/`)}</loc>
-    <lastmod>${now}</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>1.0</priority>
-  </url>
-  <url>
-    <loc>${escapeXml(`${siteUrl}/artykuly`)}</loc>
-    <lastmod>${now}</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.9</priority>
-  </url>
-</urlset>`;
-    return new NextResponse(fallback, {
-      headers: {
-        'Content-Type': 'application/xml; charset=utf-8',
-        'Cache-Control': 's-maxage=600',
-      },
-    });
+    if (items.length < PER_PAGE) break;
+    page += 1;
   }
+
+  const xml = buildXml(urls);
+  return new Response(xml, {
+    headers: {
+      'Content-Type': 'application/xml; charset=utf-8',
+      'Cache-Control': 'public, max-age=60, s-maxage=60', 
+    },
+  });
 }
