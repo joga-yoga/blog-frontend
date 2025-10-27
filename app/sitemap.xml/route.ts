@@ -1,10 +1,10 @@
+// app/sitemap.xml/route.ts
 
-
-export const dynamic = 'force-dynamic';   // не строим на билде
+export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 export const fetchCache = 'default-no-store';
 
-const ENV_BASE = process.env.NEXT_PUBLIC_SITE_URL; 
+const ENV_BASE = process.env.NEXT_PUBLIC_SITE_URL; // например: https://wiedza.joga.yoga
 const API =
   process.env.NEXT_PUBLIC_API_BASE_URL ??
   process.env.NEXT_PUBLIC_BACKEND_URL ??
@@ -27,6 +27,13 @@ type ApiResp =
   | { page?: number; per_page?: number; total?: number; items?: ApiItem[] }
   | { meta?: { page?: number; per_page?: number; total_pages?: number }; items?: ApiItem[] };
 
+type UrlEntry = {
+  loc: string;
+  lastmod?: string;
+  changefreq?: 'always' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'yearly' | 'never';
+  priority?: number;
+};
+
 function xmlEscape(s: string): string {
   return s
     .replaceAll('&', '&amp;')
@@ -36,7 +43,7 @@ function xmlEscape(s: string): string {
     .replaceAll("'", '&apos;');
 }
 
-function buildXml(urls: { loc: string; lastmod?: string; changefreq?: string; priority?: number }) {
+function buildXml(urls: UrlEntry[]): string {
   const body = urls
     .map((u) => {
       const parts = [
@@ -50,6 +57,7 @@ function buildXml(urls: { loc: string; lastmod?: string; changefreq?: string; pr
       return `<url>${parts}</url>`;
     })
     .join('');
+
   return `<?xml version="1.0" encoding="UTF-8"?>` +
          `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">` +
          body +
@@ -60,7 +68,7 @@ function isLocal(value?: string) {
   if (!value) return true;
   try {
     const u = new URL(value);
-    return ['localhost', '127.0.0.1'].includes(u.hostname);
+    return u.hostname === 'localhost' || u.hostname === '127.0.0.1';
   } catch {
     return true;
   }
@@ -77,15 +85,14 @@ export async function GET(req: Request): Promise<Response> {
   const BASE = resolveBase(req);
   const nowIso = new Date().toISOString();
 
-  const urls: { loc: string; lastmod?: string; changefreq?: string; priority?: number }[] = [
-    { loc: `${BASE}/`,              lastmod: nowIso, changefreq: 'weekly', priority: 1.0 },
+  const urls: UrlEntry[] = [
+    { loc: `${BASE}/`, lastmod: nowIso, changefreq: 'weekly', priority: 1.0 },
     { loc: `${BASE}/privacy-policy`, lastmod: nowIso, changefreq: 'yearly', priority: 0.3 },
   ];
 
-  // если API «локальный» — отдать базовый sitemap и не падать
+  // Если API локальный/пустой — отдаём базовый sitemap, не падаем
   if (isLocal(API)) {
-    const xml = buildXml(urls);
-    return new Response(xml, {
+    return new Response(buildXml(urls), {
       headers: { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'public, max-age=60' },
     });
   }
@@ -115,8 +122,8 @@ export async function GET(req: Request): Promise<Response> {
       }
 
       for (const it of items) {
+        // если путь на сайте другой, поменяй /artykuly на нужный
         urls.push({
-          // если реальный маршрут у тебя /posts/[slug], замени на /posts
           loc: `${BASE}/artykuly/${it.slug}`,
           lastmod: new Date(it.updated_at ?? it.created_at).toISOString(),
           changefreq: 'weekly',
@@ -130,11 +137,10 @@ export async function GET(req: Request): Promise<Response> {
       page += 1;
     }
   } catch {
-    // fail-safe: отдать то, что уже собрали
+    // fail-safe — отдадим то, что успели собрать
   }
 
-  const xml = buildXml(urls);
-  return new Response(xml, {
+  return new Response(buildXml(urls), {
     headers: {
       'Content-Type': 'application/xml; charset=utf-8',
       'Cache-Control': 'public, max-age=60, s-maxage=60',
