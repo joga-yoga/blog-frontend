@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import ArticlePage from '../app/artykuly/[slug]/page';
 import { getArticle } from '@/lib/api/client';
+import { resetSiteConfigCache } from '@/lib/site';
 
 jest.mock('@/lib/api/client', () => {
   const actual = jest.requireActual('@/lib/api/client');
@@ -14,6 +15,8 @@ const mockedGetArticle = getArticle as jest.MockedFunction<typeof getArticle>;
 
 beforeEach(() => {
   mockedGetArticle.mockReset();
+  process.env.NEXT_PUBLIC_SITE_URL = 'https://wiedza.joga.yoga';
+  resetSiteConfigCache();
 });
 
 it('renders article sections, FAQ and citations', async () => {

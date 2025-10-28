@@ -1,8 +1,14 @@
-export const metadata = {
-  title: "Polityka prywatności | wiedza.joga.yoga",
+import type { Metadata } from 'next';
+import { buildCanonicalUrl } from '@/lib/site';
+
+export const metadata: Metadata = {
+  title: 'Polityka prywatności | wiedza.joga.yoga',
   description:
-    "Dowiedz się, w jaki sposób wiedza.joga.yoga chroni Twoje dane osobowe, pliki cookies i zgodność z RODO (GDPR).",
-  robots: "index,follow",
+    'Dowiedz się, w jaki sposób wiedza.joga.yoga chroni Twoje dane osobowe, pliki cookies i zgodność z RODO (GDPR).',
+  robots: 'index,follow',
+  alternates: {
+    canonical: buildCanonicalUrl('/privacy-policy')
+  }
 };
 
 export default function PrivacyPolicyPage() {
