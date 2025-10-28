@@ -2,7 +2,7 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 import { getArticles } from '@/lib/api/client';
 import type { ArticleListResponse } from '@/lib/api/types';
-import { getSiteBaseUrl } from '@/lib/site';
+import { buildCanonicalUrl } from '@/lib/site';
 
 export const revalidate = 60;
 
@@ -80,9 +80,10 @@ function Pagination({ meta }: ArticleListResponse) {
 export async function generateMetadata({ searchParams }: { searchParams?: PageProps['searchParams'] }): Promise<Metadata> {
   const resolved = (await searchParams) ?? {};
   const { page } = parseQuery(resolved);
-  const siteUrl = getSiteBaseUrl();
-  const canonicalPath = page > 1 ? `/artykuly?page=${page}` : '/artykuly';
-  const canonicalUrl = `${siteUrl}${canonicalPath}`;
+  const canonicalUrl = buildCanonicalUrl(
+    '/artykuly',
+    page > 1 ? new URLSearchParams({ page: String(page) }) : null
+  );
 
   return {
     title: page > 1 ? `Artykuły – strona ${page}` : 'Artykuły',

@@ -5,9 +5,9 @@ import { notFound } from 'next/navigation';
 import { Markdown } from '@/components/Markdown';
 import { getArticle, NotFoundError } from '@/lib/api/client';
 import type { ArticleCitation, ArticleDetailResponse, ArticleFaqItem } from '@/lib/api/types';
-import { getSiteBaseUrl } from '@/lib/site';
+import { assertValidCanonical, buildArticleCanonical } from '@/lib/site';
 
-export const revalidate = 600;
+export const revalidate = 0; // TODO: Restore incremental static regeneration once canonical changes are fully deployed.
 
 type PageParams = { slug: string };
 
@@ -35,12 +35,9 @@ function mapFaq(items: ArticleFaqItem[]): ArticleFaqItem[] {
   }));
 }
 
-function buildArticleJsonLd(article: ArticleDetailResponse) {
+function buildArticleJsonLd(article: ArticleDetailResponse, canonicalUrl: string) {
   const createdAt = article.created_at ?? article.updated_at ?? new Date().toISOString();
   const updatedAt = article.updated_at ?? createdAt;
-  const siteUrl = getSiteBaseUrl();
-  const fallbackCanonical = `${siteUrl}/artykuly/${article.slug}`;
-  const canonicalUrl = article.seo.canonical ?? fallbackCanonical;
 
   return {
     '@context': 'https://schema.org',
@@ -92,9 +89,7 @@ export async function generateMetadata({ params }: GenerateMetadataProps): Promi
 
   try {
     const article = await getArticle(slug, { revalidate });
-    const siteUrl = getSiteBaseUrl();
-    const fallbackCanonical = `${siteUrl}/artykuly/${article.slug}`;
-    const canonicalUrl = article.seo.canonical ?? fallbackCanonical;
+    const canonicalUrl = assertValidCanonical(buildArticleCanonical(article.slug));
     const createdAt = article.created_at ?? article.updated_at;
     const updatedAt = article.updated_at ?? article.created_at;
     const robotsValue = article.seo.robots?.toLowerCase() ?? '';
@@ -153,8 +148,9 @@ export default async function ArticlePage({ params }: PageProps) {
   const citations = normalizeCitations(article.article.citations);
   const createdAt = formatDate(article.created_at ?? article.updated_at ?? undefined);
   const updatedAt = formatDate(article.updated_at ?? article.created_at ?? undefined);
+  const canonicalUrl = assertValidCanonical(buildArticleCanonical(article.slug));
 
-  const articleJsonLd = buildArticleJsonLd(article);
+  const articleJsonLd = buildArticleJsonLd(article, canonicalUrl);
   const faqJsonLd = buildFaqJsonLd(faqItems);
 
   return (

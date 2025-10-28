@@ -1,6 +1,14 @@
 import Link from 'next/link';
+import type { Metadata } from 'next';
 import { getArticles, getHealth, ServiceUnavailableError, type ApiError } from '@/lib/api/client';
 import type { ArticleListResponse } from '@/lib/api/types';
+import { buildCanonicalUrl } from '@/lib/site';
+
+export const metadata: Metadata = {
+  alternates: {
+    canonical: buildCanonicalUrl('/')
+  }
+};
 
 export const revalidate = 300;
 

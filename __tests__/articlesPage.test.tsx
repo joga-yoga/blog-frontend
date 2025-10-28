@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import HomePage from '../app/page';
 import { getArticles, getHealth, ServiceUnavailableError } from '@/lib/api/client';
+import { resetSiteConfigCache } from '@/lib/site';
 
 jest.mock('@/lib/api/client', () => {
   const actual = jest.requireActual('@/lib/api/client');
@@ -31,6 +32,8 @@ function createArticleSummary(
 beforeEach(() => {
   mockedGetArticles.mockReset();
   mockedGetHealth.mockReset();
+  process.env.NEXT_PUBLIC_SITE_URL = 'https://wiedza.joga.yoga';
+  resetSiteConfigCache();
 });
 
 it('renders articles with pagination and tags', async () => {

@@ -1,12 +1,16 @@
 import type { Metadata } from 'next';
 import { ArticleGeneratorForm } from '@/components/articles/ArticleGeneratorForm';
 import { getArticleSchema, getRubrics } from '@/lib/api/client';
+import { buildCanonicalUrl } from '@/lib/site';
 
 export const revalidate = 3600;
 
 export const metadata: Metadata = {
   title: 'Generator artykułów',
-  description: 'Złóż zamówienie na nowy artykuł, korzystając z rubryk i wskazówek SEO.'
+  description: 'Złóż zamówienie na nowy artykuł, korzystając z rubryk i wskazówek SEO.',
+  alternates: {
+    canonical: buildCanonicalUrl('/generator')
+  }
 };
 
 export default async function ArticleGeneratorPage() {
