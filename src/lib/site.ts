@@ -1,3 +1,5 @@
+// src/lib/site.ts
+
 const DEFAULT_SITE_URL = 'https://wiedza.joga.yoga';
 
 type SiteConfig = {
@@ -7,6 +9,23 @@ type SiteConfig = {
 };
 
 let cachedSiteConfig: SiteConfig | null = null;
+
+// Helper: detect whether we can relax rules (local/dev)
+function isDevLikeEnv(): boolean {
+  // "development" — стандартный next dev, "test" — твой случай из исходника
+  return process.env.NODE_ENV !== 'production';
+}
+
+// Helper: detect localhost-ish hosts
+function isLocalHost(hostname: string): boolean {
+  return (
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '::1' ||
+    hostname.endsWith('.local') ||
+    hostname === 'host.docker.internal'
+  );
+}
 
 function normalizeSiteUrl(url: URL): Pick<SiteConfig, 'baseUrl' | 'basePathname'> {
   const normalizedPath = url.pathname === '/' ? '/' : url.pathname.replace(/\/+$/, '');
@@ -31,16 +50,24 @@ function resolveSiteConfig(): SiteConfig {
     );
   }
 
-  if (parsed.protocol !== 'https:') {
-    if (process.env.NODE_ENV === 'test') {
-      parsed = new URL(DEFAULT_SITE_URL);
-    } else {
-      throw new Error('NEXT_PUBLIC_SITE_URL must use the https protocol.');
-    }
-  }
-
   if (!parsed.hostname) {
     throw new Error('NEXT_PUBLIC_SITE_URL must include a hostname.');
+  }
+
+  const isDev = isDevLikeEnv();
+  const isLocal = isLocalHost(parsed.hostname);
+
+  // In production we still require https, always.
+  if (!isDev) {
+    if (parsed.protocol !== 'https:') {
+      throw new Error('NEXT_PUBLIC_SITE_URL must use the https protocol.');
+    }
+  } else {
+    // In dev we allow http IF it's a local host.
+    if (parsed.protocol !== 'https:' && !isLocal) {
+      // fallback to default https domain to avoid weird states
+      parsed = new URL(DEFAULT_SITE_URL);
+    }
   }
 
   const { baseUrl, basePathname } = normalizeSiteUrl(parsed);
@@ -73,12 +100,25 @@ export function assertValidCanonical(url: string): string {
     throw new Error(`Invalid canonical URL provided: "${url}".`);
   }
 
-  if (parsed.protocol !== 'https:') {
-    throw new Error(`Canonical URL must use https. Received protocol: ${parsed.protocol}`);
+  const isDev = isDevLikeEnv();
+  const isLocal = isLocalHost(parsed.hostname);
+
+  // In production: strict https
+  if (!isDev) {
+    if (parsed.protocol !== 'https:') {
+      throw new Error(`Canonical URL must use https. Received protocol: ${parsed.protocol}`);
+    }
+  } else {
+    // In dev: allow http://localhost:3000 etc.
+    if (parsed.protocol !== 'https:' && !isLocal) {
+      throw new Error(`Canonical URL must use https or be local. Received: ${parsed.protocol}://${parsed.hostname}`);
+    }
   }
 
   if (!parsed.hostname.endsWith(hostname)) {
-    throw new Error(`Canonical URL must remain on hostname "${hostname}". Received: "${parsed.hostname}".`);
+    throw new Error(
+      `Canonical URL must remain on hostname "${hostname}". Received: "${parsed.hostname}".`
+    );
   }
 
   if (parsed.hash) {
