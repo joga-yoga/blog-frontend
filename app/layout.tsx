@@ -1,9 +1,11 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
+import Script from 'next/script';
 import './globals.css';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://wiedza.joga.yoga';
+const GTM_ID = process.env.NEXT_PUBLIC_GTM_ID ?? 'GTM-MJJHVX9H';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -40,6 +42,32 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="pl">
       <body className="min-h-screen bg-white text-slate-900">
+        {/* Google Tag Manager (noscript) — должен быть самым верхним в <body> */}
+        {GTM_ID && (
+          <noscript
+            dangerouslySetInnerHTML={{
+              __html: `
+                <iframe src="https://www.googletagmanager.com/ns.html?id=${GTM_ID}"
+                  height="0" width="0" style="display:none;visibility:hidden"></iframe>
+              `,
+            }}
+          />
+        )}
+
+        {/* Google Tag Manager */}
+        {GTM_ID && (
+          <Script id="gtm-init" strategy="afterInteractive">
+            {`
+              (function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+              new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+              j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+              'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+              })(window,document,'script','dataLayer','${GTM_ID}');
+            `}
+          </Script>
+        )}
+        {/* End Google Tag Manager */}
+
         <div className="mx-auto flex min-h-screen w-full max-w-5xl flex-col px-4 py-6 sm:px-6 lg:px-8">
           <header className="mb-12 border-b border-gray-200 pb-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -56,12 +84,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               </nav>
             </div>
             <p className="mt-3 max-w-2xl text-sm text-gray-600">
-              Polski blog o jodze, medytacji i oddechu. Trendy wellness 2026, praktyka, zdrowie i wyjazdy z jogą — treści tworzone z myślą o czytelnikach w Polsce.
+              Polski blog o jodze, medytacji i świadomym życiu. Trendy wellness 2026, praktyka, zdrowie i wyjazdy jogowe w Polsce i za granicą.
             </p>
           </header>
           <main className="flex-1 pb-16">{children}</main>
           <footer className="mt-12 border-t border-gray-200 pt-6 text-sm text-gray-500">
-            © {new Date().getFullYear()} joga.yoga — Wszelkie prawa zastrzeżone. 
+            © {new Date().getFullYear()} joga.yoga — Wszelkie prawa zastrzeżone.{' '}
             <Link href="/privacy-policy">Polityka prywatności</Link>
           </footer>
         </div>
@@ -69,4 +97,3 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     </html>
   );
 }
-
