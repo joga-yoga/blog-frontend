@@ -75,8 +75,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 Blog joga.yoga — Polska
               </Link>
               <nav className="flex items-center gap-3 text-sm font-medium text-gray-600">
-                <Link href="/" className="rounded-md px-3 py-1 hover:bg-gray-100">
-                  Artykuły o jodze
+                <Link href="https://chatgpt.com/g/g-68fe777386b081919b32d3e839aba91c-wiedza-joga-yoga-milosc-spokoj-i-uwaznosc" className="rounded-md px-3 py-1 hover:bg-gray-100">
+                  GPTs naszego bloga
                 </Link>
                 <Link href="/generator" className="rounded-md px-3 py-1 hover:bg-gray-100">
                   Generator artykułów (beta)
@@ -89,7 +89,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           </header>
           <main className="flex-1 pb-16">{children}</main>
           <footer className="mt-12 border-t border-gray-200 pt-6 text-sm text-gray-500">
-            © {new Date().getFullYear()} joga.yoga — Wszelkie prawa zastrzeżone.{' '}
+            © {new Date().getFullYear()} joga.yoga — Wszelkie prawa zastrzeżone. {' '}
             <Link href="/privacy-policy">Polityka prywatności</Link>
           </footer>
         </div>
