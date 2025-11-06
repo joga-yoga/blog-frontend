@@ -3,6 +3,7 @@ Allow: /
 
 Disallow: /admin/
 Disallow: /api/
+Disallow: /*?q=
 Disallow: /generator/
 
 Sitemap: https://wiedza.joga.yoga/sitemap.xml
