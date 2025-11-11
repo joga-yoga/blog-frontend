@@ -1,0 +1,45 @@
+{
+  "seo": {
+    "title": "Jak oddychać w jodze",
+    "description": "Poznaj podstawowe techniki oddechu używane w jodze.",
+    "canonical": "https://wiedza.joga.yoga/artykuly/jak-oddychac-w-jodze",
+    "slug": "jak-oddychac-w-jodze",
+    "robots": "index,follow"
+  },
+  "taxonomy": {
+    "section": "practice",
+    "categories": ["breathwork", "basics"],
+    "tags": ["pranayama", "oddech", "nauka"]
+  },
+  "aeo": {
+    "geo_focus": ["PL"],
+    "faq": [
+      {
+        "question": "Jak często ćwiczyć pranayamę?",
+        "answer": "Regularnie, najlepiej codziennie w krótkich sesjach po 10 minut."
+      },
+      {
+        "question": "Czy pranayama jest bezpieczna dla początkujących?",
+        "answer": "Tak, jeśli zachowasz łagodność i świadomość, a w razie wątpliwości skonsultujesz się z nauczycielem."
+      }
+    ]
+  },
+  "article": {
+    "lead": "Świadomy oddech to fundament praktyki jogi, wspierający koncentrację i spokój.",
+    "headline": "Oddychanie w praktyce jogi",
+    "sections": [
+      {
+        "title": "Dlaczego oddech jest ważny",
+        "body": "Prawidłowy oddech reguluje układ nerwowy i pomaga w utrzymaniu uważności podczas asan."
+      },
+      {
+        "title": "Podstawowe techniki",
+        "body": "Zacznij od pełnego oddechu jogicznego, a następnie wprowadź naprzemienny oddech nostrzami (nadi shodhana)."
+      }
+    ],
+    "citations": [
+      "Light on Pranayama, B.K.S. Iyengar",
+      "Scientific American: How Breathing Calms the Brain"
+    ]
+  }
+}
