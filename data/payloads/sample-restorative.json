@@ -1,0 +1,42 @@
+{
+  "seo": {
+    "title": "Regeneracja dzięki jodze restoratywnej",
+    "description": "Dowiedz się, jak praktyka restoratywna wspiera regenerację układu nerwowego.",
+    "slug": "joga-restoratywna-na-regeneracje"
+  },
+  "taxonomy": {
+    "section": "recovery",
+    "categories": ["relaks", "odnowa"],
+    "tags": ["regeneracja", "restoratywna"]
+  },
+  "aeo": {
+    "geo_focus": ["PL"],
+    "faq": [
+      {
+        "question": "Jak długo trwają pozycje restoratywne?",
+        "answer": "Zazwyczaj od 5 do 15 minut, w zależności od komfortu praktykującego."
+      }
+    ]
+  },
+  "article": {
+    "lead": "Joga restoratywna przywraca równowagę poprzez długie, wspierane pozycje.",
+    "headline": "Odbuduj energię z jogą restoratywną",
+    "sections": [
+      {
+        "title": "Czym jest joga restoratywna",
+        "body": "To praktyka nastawiona na regenerację, w której ciało wspiera się na pomocach takich jak bolstery i koce."
+      },
+      {
+        "title": "Korzyści dla układu nerwowego",
+        "body": "Długie, łagodne pozycje aktywują przywspółczulny układ nerwowy, redukując napięcie i stres."
+      },
+      {
+        "title": "Jak zacząć",
+        "body": "Przygotuj spokojne miejsce, podstawowe pomoce i zacznij od pozycji takich jak Supta Baddha Konasana."
+      }
+    ],
+    "citations": [
+      "Judith Hanson Lasater, Relax and Renew"
+    ]
+  }
+}
