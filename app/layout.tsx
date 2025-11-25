@@ -9,7 +9,6 @@ const GTM_ID = process.env.NEXT_PUBLIC_GTM_ID ?? 'GTM-MJJHVX9H';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
-
   title: {
     default: 'Blog joga.yoga – Wiedza, Inspiracje i Trendy Jogowe w Polsce',
     template: '%s | joga.yoga – Blog o jodze, wellness i podróżach duchowych'

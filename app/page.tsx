@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 export const revalidate = 300;
 
-const ARTICLES_PER_PAGE = 10;
+const ARTICLES_PER_PAGE = 12;
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
@@ -36,7 +36,7 @@ function parseQuery(searchParams: SearchParams): QueryState {
   const section = Array.isArray(sectionValue) ? sectionValue[0] : sectionValue;
   const q = Array.isArray(searchValue) ? searchValue[0] : searchValue;
 
-  const parsedPage = Number.parseInt(page ?? '1', 10);
+  const parsedPage = Number.parseInt(page ?? '1', 12);
 
   return {
     page: Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1,
