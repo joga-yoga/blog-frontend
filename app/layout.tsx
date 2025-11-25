@@ -5,7 +5,7 @@ import Script from 'next/script';
 import './globals.css';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://wiedza.joga.yoga';
-const GTM_ID = process.env.NEXT_PUBLIC_GTM_ID ?? 'GTM-MJJHVX9H';
+const GTM_ID = process.env.NEXT_PUBLIC_GTM_ID ?? 'GTM-MJJHVX9H'; // no GA4 fallback
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
@@ -43,7 +43,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="pl">
       <body className="min-h-screen bg-white text-slate-900">
-        {/* Google Tag Manager (noscript) — должен быть самым верхним в <body> */}
+        {/* Google Tag Manager (noscript) — must be at the top of <body> */}
         {GTM_ID && (
           <noscript
             dangerouslySetInnerHTML={{
@@ -90,7 +90,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           </header>
           <main className="flex-1 pb-16">{children}</main>
           <footer className="mt-12 border-t border-gray-200 pt-6 text-sm text-gray-500">
-            © {new Date().getFullYear()} joga.yoga — Wszelkie prawa zastrzeżone. {' '}
+            © {new Date().getFullYear()} joga.yoga — Wszelkie prawa zastrzeżone.{' '}
             <Link href="/privacy-policy">Polityka prywatności</Link>
           </footer>
         </div>
