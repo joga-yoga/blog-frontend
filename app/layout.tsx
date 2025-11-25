@@ -5,7 +5,7 @@ import Script from 'next/script';
 import './globals.css';
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://wiedza.joga.yoga';
-const GTM_ID = process.env.NEXT_PUBLIC_GTM_ID ?? 'GTM-MJJHVX9H';
+const GTM_ID = process.env.NEXT_PUBLIC_GTM_ID ?? 'G-DCYYMEN9SB';
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
