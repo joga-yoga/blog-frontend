@@ -179,44 +179,51 @@ function normalizeQueueResponse(data: unknown): QueueEntry[] {
       ? ((data as { items?: unknown[] }).items ?? [])
       : [];
 
-  return rawItems
-    .map((item) => {
-      if (!item || typeof item !== "object") {
-        return null;
-      }
+  const entries: QueueEntry[] = [];
 
-      const record = item as Record<string, unknown>;
-      const id =
-        typeof record.id === "string"
-          ? record.id
-          : typeof record.id === "number"
-            ? String(record.id)
-            : undefined;
-      const jobId =
-        typeof record.job_id === "string"
-          ? record.job_id
-          : typeof record.job_id === "number"
-            ? String(record.job_id)
-            : undefined;
-      const url = typeof record.url === "string" ? record.url : "";
+  for (const item of rawItems) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
 
-      if (!url) {
-        return null;
-      }
+    const record = item as Record<string, unknown>;
 
-      const status = typeof record.status === "string" ? record.status : "unknown";
-      const plannedAt = typeof record.planned_at === "string" ? record.planned_at : null;
+    const id =
+      typeof record.id === "string"
+        ? record.id
+        : typeof record.id === "number"
+          ? String(record.id)
+          : undefined;
 
-      return {
-        id,
-        jobId,
-        url,
-        status,
-        plannedAt,
-      } satisfies QueueEntry;
-    })
-    .filter((entry): entry is QueueEntry => Boolean(entry));
+    const jobId =
+      typeof record.job_id === "string"
+        ? record.job_id
+        : typeof record.job_id === "number"
+          ? String(record.job_id)
+          : undefined;
+
+    const url = typeof record.url === "string" ? record.url : "";
+
+    // Skip entries without URL
+    if (!url) {
+      continue;
+    }
+
+    const status = typeof record.status === "string" ? record.status : "unknown";
+    const plannedAt = typeof record.planned_at === "string" ? record.planned_at : null;
+
+    entries.push({
+      id,
+      jobId,
+      url,
+      status,
+      plannedAt,
+    });
+  }
+
+  return entries;
 }
+
 
 function normalizeSearchResults(data: unknown): SearchResultItem[] {
   if (!data || typeof data !== "object") {
