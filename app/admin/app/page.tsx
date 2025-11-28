@@ -1051,7 +1051,7 @@ const AdminAppPage = () => {
                                 href={`/generator?video_url=${encodeURIComponent(item.url)}`}
                                 className="text-blue-600 hover:text-blue-700"
                               >
-                                Use in generator
+                                Use this video
                               </Link>
                             </div>
                           </td>
