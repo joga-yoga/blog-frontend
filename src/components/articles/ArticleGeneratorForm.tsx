@@ -65,9 +65,9 @@ export function ArticleGeneratorForm({ rubrics }: ArticleGeneratorFormProps) {
 
     const payload: ArticleCreateRequest = {
       topic,
-      rubric_code: rubricCode || undefined,
+      rubric_code: rubricCode || null,
       keywords: parseKeywords(keywordsRaw),
-      guidance: guidanceRaw.trim() ? guidanceRaw.trim() : undefined,
+      guidance: guidanceRaw.trim() ? guidanceRaw.trim() : null,
       video_url: normalizedVideoUrl || undefined
     };
 
@@ -93,7 +93,7 @@ export function ArticleGeneratorForm({ rubrics }: ArticleGeneratorFormProps) {
       const result = await createArticle(validation.data);
       router.push(`/artykuly/${result.slug}`);
     } catch (err) {
-      if (err instanceof ServiceUnavailableError) {
+      if (err instanceof ServiceUnavailableError || (err instanceof ApiError && err.status >= 500)) {
         setError('Generowanie artykułu jest chwilowo niedostępne. Spróbuj ponownie za kilka minut.');
       } else if (err instanceof ApiError) {
         const message =

@@ -178,16 +178,35 @@ export type ArticleDetailResponse = Omit<ArticleDetailResponseSchema, 'article'>
   article: ArticleBody;
 };
 
+const nullableTrimmedString = (maxLength?: number) =>
+  z
+    .union([z.string(), z.null(), z.undefined()])
+    .transform((value) => {
+      if (value === null) {
+        return null;
+      }
+
+      if (typeof value !== 'string') {
+        return undefined as string | null | undefined;
+      }
+
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : null;
+    })
+    .refine((value) => {
+      if (typeof maxLength !== 'number' || value === undefined || value === null) {
+        return true;
+      }
+
+      return value.length <= maxLength;
+    }, `String must contain at most ${maxLength ?? 0} character(s)`);
+
 export const articleCreateRequestSchema = z.object({
   topic: z.string().min(5).max(200),
-  rubric_code: z.string().optional(),
+  rubric_code: nullableTrimmedString(),
   keywords: z.array(z.string()).max(6),
-  guidance: z.string().max(500).optional(),
-  video_url: z
-    .string()
-    .max(2048)
-    .transform((value) => value.trim())
-    .optional()
+  guidance: nullableTrimmedString(500),
+  video_url: nullableTrimmedString(2048)
 });
 
 export type ArticleCreateRequest = z.infer<typeof articleCreateRequestSchema>;

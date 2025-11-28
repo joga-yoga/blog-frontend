@@ -64,7 +64,8 @@ describe('ArticleGeneratorForm', () => {
       topic: 'Nowy artykuł o innowacjach',
       rubric_code: 'biz',
       keywords: ['innowacje', 'gospodarka'],
-      guidance: 'Uwzględnij aktualne dane statystyczne.'
+      guidance: 'Uwzględnij aktualne dane statystyczne.',
+      video_url: undefined
     });
 
     await waitFor(() => expect(push).toHaveBeenCalledWith('/artykuly/nowy-artykul'));
@@ -104,9 +105,9 @@ describe('ArticleGeneratorForm', () => {
 
     expect(mockedCreateArticle).toHaveBeenCalledWith({
       topic: 'Analiza wideo',
-      rubric_code: undefined,
+      rubric_code: null,
       keywords: [],
-      guidance: undefined,
+      guidance: null,
       video_url: 'https://youtube.com/watch?v=abc'
     });
 
@@ -132,5 +133,61 @@ describe('ArticleGeneratorForm', () => {
         /To wideo nie ma transkrypcji lub nie jest ona dostępna. Wybierz inne wideo lub spróbuj ponownie później./
       )
     ).toBeInTheDocument();
+  });
+
+  it('pokazuje domyślny komunikat o niedostępności usługi przy błędach 5xx', async () => {
+    mockedCreateArticle.mockRejectedValue(new ApiError('Server error', 500, 'https://example.com/artykuly', {}));
+
+    render(<ArticleGeneratorForm rubrics={[]} />);
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText('Temat artykułu'), 'Stabilny temat');
+    await user.click(screen.getByRole('button', { name: /Wygeneruj artykuł/i }));
+
+    expect(
+      await screen.findByText(/Generowanie artykułu jest chwilowo niedostępne. Spróbuj ponownie za kilka minut./)
+    ).toBeInTheDocument();
+  });
+
+  it('zmienia etykietę przy generowaniu z wideo', async () => {
+    let resolveRequest: ((value: { status: 'published'; slug: string; id: number }) => void) | null = null;
+    mockedCreateArticle.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveRequest = resolve;
+        })
+    );
+
+    render(<ArticleGeneratorForm rubrics={[]} />);
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText('Temat artykułu'), 'Analiza wideo 2');
+    await user.type(screen.getByLabelText('Źródło wideo (opcjonalnie)'), 'https://youtube.com/watch?v=def');
+
+    const submitButton = screen.getByRole('button', { name: /Wygeneruj z wideo/i });
+    await user.click(submitButton);
+
+    expect(submitButton).toHaveTextContent('Pobieranie transkrypcji i generowanie…');
+
+    resolveRequest?.({ status: 'published', slug: 'video-article', id: 3 });
+  });
+
+  it('ustawia błąd przy polu video_url po błędzie 422 i pozostawia dane', async () => {
+    mockedCreateArticle.mockRejectedValue(
+      new ApiError('Unprocessable', 422, 'https://example.com/artykuly', {
+        detail: 'Only one video_url is supported.'
+      })
+    );
+
+    render(<ArticleGeneratorForm rubrics={[]} />);
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText('Temat artykułu'), 'Temat spełniający wymagania');
+    await user.type(screen.getByLabelText('Źródło wideo (opcjonalnie)'), ' https://youtube.com/watch?v=xyz ');
+    await user.click(screen.getByRole('button', { name: /Wygeneruj z wideo/i }));
+
+    const errors = await screen.findAllByText('Only one video_url is supported.');
+    expect(errors.length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByLabelText('Źródło wideo (opcjonalnie)')).toHaveValue('https://youtube.com/watch?v=xyz');
   });
 });
