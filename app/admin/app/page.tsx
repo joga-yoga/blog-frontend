@@ -218,7 +218,7 @@ function normalizeQueueResponse(data: unknown): QueueEntry[] {
     .filter((entry): entry is QueueEntry => Boolean(entry));
 }
 
-export function normalizeSearchResults(data: unknown): SearchResultItem[] {
+function normalizeSearchResults(data: unknown): SearchResultItem[] {
   if (!data || typeof data !== "object") {
     return [];
   }
@@ -410,10 +410,16 @@ const AdminAppPage = () => {
 
       if (!response.ok) {
         const message =
-          (payload && typeof payload === "object" && "detail" in payload && typeof (payload as { detail?: unknown }).detail === "string"
+          (payload &&
+            typeof payload === "object" &&
+            "detail" in payload &&
+            typeof (payload as { detail?: unknown }).detail === "string"
             ? (payload as { detail?: string }).detail
             : undefined) ||
-          (payload && typeof payload === "object" && "message" in payload && typeof (payload as { message?: unknown }).message === "string"
+          (payload &&
+            typeof payload === "object" &&
+            "message" in payload &&
+            typeof (payload as { message?: unknown }).message === "string"
             ? (payload as { message?: string }).message
             : undefined) ||
           (typeof payload === "string" && payload) ||
@@ -1072,11 +1078,13 @@ const AdminAppPage = () => {
                             </div>
                           </td>
                           <td className="px-3 py-3 align-top text-slate-700">{item.channel}</td>
-                            <td className="px-3 py-3 align-top text-slate-700">{formatDuration(item.durationSeconds)}</td>
-                            <td className="px-3 py-3 align-top text-slate-700">{formatDate(item.publishedAt)}</td>
-                            <td className="px-3 py-3 align-top text-slate-600">
-                              <p className="line-clamp-2 whitespace-pre-line">{item.descriptionSnippet || "—"}</p>
-                            </td>
+                          <td className="px-3 py-3 align-top text-slate-700">{formatDuration(item.durationSeconds)}</td>
+                          <td className="px-3 py-3 align-top text-slate-700">{formatDate(item.publishedAt)}</td>
+                          <td className="px-3 py-3 align-top text-slate-600">
+                            <p className="line-clamp-2 whitespace-pre-line">
+                              {item.descriptionSnippet || "—"}
+                            </p>
+                          </td>
                         </tr>
                       );
                     })
