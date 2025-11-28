@@ -26,8 +26,6 @@ type SearchFormState = {
   features: SearchFeature[];
 };
 
-type TranscriptStatus = "yes" | "no" | "unknown";
-
 type SearchResultItem = {
   videoId: string | null;
   url: string;
@@ -36,7 +34,6 @@ type SearchResultItem = {
   durationSeconds: number | null;
   publishedAt: string | null;
   descriptionSnippet: string;
-  transcriptStatus: TranscriptStatus;
 };
 
 type StatusSummary = {
@@ -79,24 +76,6 @@ function getErrorMessage(error: unknown, fallback = "Something went wrong."): st
 
   return fallback;
 }
-
-function toTranscriptStatus(value: unknown): TranscriptStatus {
-  if (value === true) {
-    return "yes";
-  }
-
-  if (value === false) {
-    return "no";
-  }
-
-  return "unknown";
-}
-
-const transcriptStatusLabels: Record<TranscriptStatus, string> = {
-  yes: "Yes",
-  no: "No",
-  unknown: "Unknown",
-};
 
 function extractChannelName(raw: string): string {
   const trimmed = raw.trim();
@@ -223,7 +202,7 @@ function normalizeQueueResponse(data: unknown): QueueEntry[] {
     .filter((entry): entry is QueueEntry => Boolean(entry));
 }
 
-function normalizeSearchResults(data: unknown): SearchResultItem[] {
+export function normalizeSearchResults(data: unknown): SearchResultItem[] {
   if (!data || typeof data !== "object") {
     return [];
   }
@@ -252,7 +231,6 @@ function normalizeSearchResults(data: unknown): SearchResultItem[] {
       const publishedAt = typeof record.published_at === "string" ? record.published_at : null;
       const descriptionSnippet =
         typeof record.description_snippet === "string" ? record.description_snippet : "";
-      const transcriptStatus = toTranscriptStatus(record.has_transcript);
       const videoId = typeof record.video_id === "string" && record.video_id.trim() ? record.video_id : null;
 
       return {
@@ -263,7 +241,6 @@ function normalizeSearchResults(data: unknown): SearchResultItem[] {
         durationSeconds,
         publishedAt,
         descriptionSnippet,
-        transcriptStatus,
       } satisfies SearchResultItem;
     })
     .filter((item): item is SearchResultItem => Boolean(item));
@@ -319,8 +296,6 @@ const AdminAppPage = () => {
   const [searchFeedback, setSearchFeedback] = useState<Feedback | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [searchAttempted, setSearchAttempted] = useState(false);
-  const [transcriptStatusByUrl, setTranscriptStatusByUrl] = useState<Record<string, TranscriptStatus>>({});
-  const [probeTrigger, setProbeTrigger] = useState(0);
 
   const [selectedUrls, setSelectedUrls] = useState<Set<string>>(() => new Set());
   const [queuePlanFeedback, setQueuePlanFeedback] = useState<Feedback | null>(null);
@@ -523,77 +498,6 @@ const AdminAppPage = () => {
     return urls;
   }, [searchResults]);
 
-  useEffect(() => {
-    if (!apiBaseUrl || !token) {
-      return;
-    }
-
-    if (probeTrigger === 0) {
-      return;
-    }
-
-    if (resultUrls.length === 0) {
-      return;
-    }
-
-    let cancelled = false;
-
-    const resultUrlSet = new Set(resultUrls);
-
-    const runProbe = async () => {
-      try {
-        const response = await apiFetch<{ has?: Record<string, boolean | null> }>(
-          "/admin/probe_transcripts",
-          { method: "POST", body: { urls: resultUrls } }
-        );
-
-        if (!response || typeof response !== "object" || cancelled) {
-          return;
-        }
-
-        const hasRecord = response.has && typeof response.has === "object" ? response.has : null;
-
-        if (!hasRecord) {
-          return;
-        }
-
-        const entries = Object.entries(hasRecord as Record<string, unknown>);
-
-        if (entries.length === 0) {
-          return;
-        }
-
-        setTranscriptStatusByUrl((previous) => {
-          let changed = false;
-          const next: Record<string, TranscriptStatus> = { ...previous };
-
-          for (const [url, value] of entries) {
-            if (!resultUrlSet.has(url)) {
-              continue;
-            }
-
-            const status = toTranscriptStatus(value);
-
-            if (next[url] !== status) {
-              next[url] = status;
-              changed = true;
-            }
-          }
-
-          return changed ? next : previous;
-        });
-      } catch (error) {
-        // Endpoint might be unavailable; keep "Unknown" without surfacing an error.
-      }
-    };
-
-    void runProbe();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [apiBaseUrl, token, apiFetch, resultUrls, probeTrigger]);
-
   const selectedItems = useMemo(
     () => selectableResults.filter((item) => selectedUrls.has(item.url)),
     [selectableResults, selectedUrls]
@@ -676,12 +580,6 @@ const AdminAppPage = () => {
       const data = await apiFetch<unknown>("/admin/search", { method: "POST", body: payload });
       const items = normalizeSearchResults(data);
       setSearchResults(items);
-      const initialStatusMap: Record<string, TranscriptStatus> = {};
-      for (const item of items) {
-        initialStatusMap[item.url] = item.transcriptStatus;
-      }
-      setTranscriptStatusByUrl(initialStatusMap);
-      setProbeTrigger((count) => count + 1);
       setSelectedUrls(new Set());
 
       if (items.length === 0) {
@@ -1098,14 +996,13 @@ const AdminAppPage = () => {
                     <th className="border-b border-slate-200 px-3 py-2">Channel</th>
                     <th className="border-b border-slate-200 px-3 py-2">Duration</th>
                     <th className="border-b border-slate-200 px-3 py-2">Published</th>
-                    <th className="border-b border-slate-200 px-3 py-2">Has Transcript</th>
                     <th className="border-b border-slate-200 px-3 py-2">Description</th>
                   </tr>
                 </thead>
                 <tbody>
                   {searchResults.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-3 py-8 text-center text-sm text-slate-500">
+                      <td colSpan={7} className="px-3 py-8 text-center text-sm text-slate-500">
                         {searchAttempted
                           ? "No results found."
                           : "Use the search above to find videos."}
@@ -1115,15 +1012,6 @@ const AdminAppPage = () => {
                     searchResults.map((item) => {
                       const checked = selectedUrls.has(item.url);
                       const selectable = isItemSelectable(item);
-                      const transcriptStatus = transcriptStatusByUrl[item.url] ?? item.transcriptStatus;
-                      const transcriptLabel = transcriptStatusLabels[transcriptStatus];
-                      const transcriptTone =
-                        transcriptStatus === "yes"
-                          ? "text-green-600"
-                          : transcriptStatus === "no"
-                            ? "text-red-600"
-                            : "text-slate-600";
-
                       return (
                         <tr key={item.url} className="border-b border-slate-100 last:border-0">
                           <td className="px-3 py-3 align-top">
@@ -1158,16 +1046,21 @@ const AdminAppPage = () => {
                             >
                               {item.title}
                             </a>
+                            <div className="mt-1 text-xs">
+                              <Link
+                                href={`/generator?video_url=${encodeURIComponent(item.url)}`}
+                                className="text-blue-600 hover:text-blue-700"
+                              >
+                                Use in generator
+                              </Link>
+                            </div>
                           </td>
                           <td className="px-3 py-3 align-top text-slate-700">{item.channel}</td>
-                          <td className="px-3 py-3 align-top text-slate-700">{formatDuration(item.durationSeconds)}</td>
-                          <td className="px-3 py-3 align-top text-slate-700">{formatDate(item.publishedAt)}</td>
-                          <td className={`px-3 py-3 align-top font-medium ${transcriptTone}`}>
-                            {transcriptLabel}
-                          </td>
-                          <td className="px-3 py-3 align-top text-slate-600">
-                            <p className="line-clamp-2 whitespace-pre-line">{item.descriptionSnippet || "—"}</p>
-                          </td>
+                            <td className="px-3 py-3 align-top text-slate-700">{formatDuration(item.durationSeconds)}</td>
+                            <td className="px-3 py-3 align-top text-slate-700">{formatDate(item.publishedAt)}</td>
+                            <td className="px-3 py-3 align-top text-slate-600">
+                              <p className="line-clamp-2 whitespace-pre-line">{item.descriptionSnippet || "—"}</p>
+                            </td>
                         </tr>
                       );
                     })
