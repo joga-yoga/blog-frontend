@@ -46,6 +46,8 @@ type StatusSummary = {
 };
 
 type QueueEntry = {
+  id?: string;
+  jobId?: string;
   url: string;
   status: string;
   plannedAt: string | null;
@@ -184,6 +186,18 @@ function normalizeQueueResponse(data: unknown): QueueEntry[] {
       }
 
       const record = item as Record<string, unknown>;
+      const id =
+        typeof record.id === "string"
+          ? record.id
+          : typeof record.id === "number"
+            ? String(record.id)
+            : undefined;
+      const jobId =
+        typeof record.job_id === "string"
+          ? record.job_id
+          : typeof record.job_id === "number"
+            ? String(record.job_id)
+            : undefined;
       const url = typeof record.url === "string" ? record.url : "";
 
       if (!url) {
@@ -194,6 +208,8 @@ function normalizeQueueResponse(data: unknown): QueueEntry[] {
       const plannedAt = typeof record.planned_at === "string" ? record.planned_at : null;
 
       return {
+        id,
+        jobId,
         url,
         status,
         plannedAt,
@@ -1157,25 +1173,29 @@ const AdminAppPage = () => {
                       </tr>
                     </thead>
                     <tbody>
-                      {queueEntries.map((entry) => (
-                        <tr key={`${entry.url}-${entry.plannedAt ?? "none"}`} className="border-b border-slate-100 last:border-0">
-                          <td className="px-3 py-3 align-top">
-                            <a
-                              href={entry.url}
-                              target="_blank"
-                              rel="noreferrer"
-                              title={entry.url}
-                              className="break-all text-slate-900 hover:text-blue-600"
-                            >
-                              {entry.url.length > 60
-                                ? `${entry.url.slice(0, 30)}…${entry.url.slice(-20)}`
-                                : entry.url}
-                            </a>
-                          </td>
-                          <td className="px-3 py-3 align-top text-slate-700">{entry.status}</td>
-                          <td className="px-3 py-3 align-top text-slate-700">{formatDateTime(entry.plannedAt)}</td>
-                        </tr>
-                      ))}
+                      {queueEntries.map((entry, index) => {
+                        const key = entry.id ?? entry.jobId ?? `${entry.url}-${entry.plannedAt ?? "none"}-${index}`;
+
+                        return (
+                          <tr key={key} className="border-b border-slate-100 last:border-0">
+                            <td className="px-3 py-3 align-top">
+                              <a
+                                href={entry.url}
+                                target="_blank"
+                                rel="noreferrer"
+                                title={entry.url}
+                                className="break-all text-slate-900 hover:text-blue-600"
+                              >
+                                {entry.url.length > 60
+                                  ? `${entry.url.slice(0, 30)}…${entry.url.slice(-20)}`
+                                  : entry.url}
+                              </a>
+                            </td>
+                            <td className="px-3 py-3 align-top text-slate-700">{entry.status}</td>
+                            <td className="px-3 py-3 align-top text-slate-700">{formatDateTime(entry.plannedAt)}</td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
