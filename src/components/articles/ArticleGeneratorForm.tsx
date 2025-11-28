@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useMemo, useState, type FormEvent } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createArticle, ApiError, ServiceUnavailableError } from '@/lib/api/client';
 import { articleCreateRequestSchema, type ArticleCreateRequest, type Rubric } from '@/lib/api/types';
 
@@ -9,7 +9,7 @@ type ArticleGeneratorFormProps = {
   rubrics: Rubric[];
 };
 
-type FieldErrors = Partial<Record<'topic' | 'keywords' | 'guidance', string>>;
+type FieldErrors = Partial<Record<'topic' | 'keywords' | 'guidance' | 'video_url', string>>;
 
 function parseKeywords(value: string): string[] {
   if (!value.trim()) {
@@ -26,9 +26,32 @@ function parseKeywords(value: string): string[] {
 
 export function ArticleGeneratorForm({ rubrics }: ArticleGeneratorFormProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialVideoUrl = useMemo(() => searchParams?.get('video_url') ?? '', [searchParams]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [videoUrl, setVideoUrl] = useState(initialVideoUrl);
+
+  const normalizedVideoUrl = videoUrl.trim();
+  const isVideoBased = Boolean(normalizedVideoUrl);
+
+  const videoUrlWarning = useMemo(() => {
+    if (!normalizedVideoUrl) {
+      return null;
+    }
+
+    try {
+      const parsed = new URL(normalizedVideoUrl);
+      if (!parsed.protocol.startsWith('http')) {
+        return 'Adres URL powinien zaczynać się od http(s).';
+      }
+    } catch {
+      return 'To nie wygląda na poprawny adres URL. Upewnij się, że wklejono pełny link do wideo.';
+    }
+
+    return null;
+  }, [normalizedVideoUrl]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -44,7 +67,8 @@ export function ArticleGeneratorForm({ rubrics }: ArticleGeneratorFormProps) {
       topic,
       rubric_code: rubricCode || undefined,
       keywords: parseKeywords(keywordsRaw),
-      guidance: guidanceRaw.trim() ? guidanceRaw.trim() : undefined
+      guidance: guidanceRaw.trim() ? guidanceRaw.trim() : undefined,
+      video_url: normalizedVideoUrl || undefined
     };
 
     const validation = articleCreateRequestSchema.safeParse(payload);
@@ -54,7 +78,8 @@ export function ArticleGeneratorForm({ rubrics }: ArticleGeneratorFormProps) {
       setFieldErrors({
         topic: validationErrors.topic?.[0],
         keywords: validationErrors.keywords?.[0],
-        guidance: validationErrors.guidance?.[0]
+        guidance: validationErrors.guidance?.[0],
+        video_url: validationErrors.video_url?.[0]
       });
       setError('Popraw zaznaczone pola i spróbuj ponownie.');
       return;
@@ -71,7 +96,26 @@ export function ArticleGeneratorForm({ rubrics }: ArticleGeneratorFormProps) {
       if (err instanceof ServiceUnavailableError) {
         setError('Generowanie artykułu jest chwilowo niedostępne. Spróbuj ponownie za kilka minut.');
       } else if (err instanceof ApiError) {
-        setError('Nie udało się utworzyć artykułu. Sprawdź dane wejściowe i spróbuj ponownie.');
+        const message =
+          (typeof err.body === 'object' && err.body && 'detail' in err.body && typeof err.body.detail === 'string'
+            ? err.body.detail
+            : null) ||
+          (typeof err.body === 'object' && err.body && 'message' in err.body && typeof err.body.message === 'string'
+            ? err.body.message
+            : null) ||
+          (typeof err.body === 'string' && err.body.trim() ? err.body.trim() : null);
+
+        if (err.status === 422) {
+          const transcriptUnavailable = (message ?? '').toLowerCase().includes('transcript');
+          setError(
+            transcriptUnavailable
+              ? 'To wideo nie ma transkrypcji lub nie jest ona dostępna. Wybierz inne wideo lub spróbuj ponownie później.'
+              : message ?? 'Nie udało się utworzyć artykułu. Sprawdź dane wejściowe i spróbuj ponownie.'
+          );
+          setFieldErrors((previous) => ({ ...previous, video_url: message ?? previous.video_url }));
+        } else {
+          setError(message ?? 'Nie udało się utworzyć artykułu. Sprawdź dane wejściowe i spróbuj ponownie.');
+        }
       } else {
         setError('Wystąpił nieoczekiwany błąd.');
       }
@@ -98,6 +142,26 @@ export function ArticleGeneratorForm({ rubrics }: ArticleGeneratorFormProps) {
         />
         <p className="text-xs text-gray-500">Wpisz jedno konkretne zagadnienie w języku polskim (5-200 znaków).</p>
         {fieldErrors.topic ? <p className="text-sm text-red-600">{fieldErrors.topic}</p> : null}
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor="video_url" className="block text-sm font-medium text-gray-700">
+          Źródło wideo (opcjonalnie)
+        </label>
+        <input
+          id="video_url"
+          name="video_url"
+          type="url"
+          value={videoUrl}
+          onChange={(event) => setVideoUrl(event.target.value)}
+          maxLength={2048}
+          placeholder="https://www.youtube.com/watch?v=..."
+          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+          disabled={isSubmitting}
+        />
+        <p className="text-xs text-gray-500">Podaj pełny link do filmu. Jeśli zostawisz puste, artykuł zostanie wygenerowany na podstawie tematu.</p>
+        {videoUrlWarning ? <p className="text-sm text-amber-600">{videoUrlWarning}</p> : null}
+        {fieldErrors.video_url ? <p className="text-sm text-red-600">{fieldErrors.video_url}</p> : null}
       </div>
 
       <div className="space-y-2">
@@ -159,7 +223,13 @@ export function ArticleGeneratorForm({ rubrics }: ArticleGeneratorFormProps) {
           disabled={isSubmitting}
           className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-70"
         >
-          {isSubmitting ? 'Generowanie…' : 'Wygeneruj artykuł'}
+          {isSubmitting
+            ? isVideoBased
+              ? 'Pobieranie transkrypcji i generowanie…'
+              : 'Generowanie…'
+            : isVideoBased
+              ? 'Wygeneruj z wideo'
+              : 'Wygeneruj artykuł'}
         </button>
       </div>
     </form>

@@ -182,7 +182,12 @@ export const articleCreateRequestSchema = z.object({
   topic: z.string().min(5).max(200),
   rubric_code: z.string().optional(),
   keywords: z.array(z.string()).max(6),
-  guidance: z.string().max(500).optional()
+  guidance: z.string().max(500).optional(),
+  video_url: z
+    .string()
+    .max(2048)
+    .transform((value) => value.trim())
+    .optional()
 });
 
 export type ArticleCreateRequest = z.infer<typeof articleCreateRequestSchema>;
