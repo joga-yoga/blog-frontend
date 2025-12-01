@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getArticles } from '@/lib/api/client';
 import { getSiteBaseUrl } from '@/lib/site';
 
-const PER_PAGE = 50;           // дефолт на случай, если бэкенд не вернет per_page
+const PER_PAGE = 50;
 export const revalidate = 3600;
 
 function escapeXml(value: string): string {
@@ -14,51 +14,61 @@ function escapeXml(value: string): string {
     .replace(/'/g, '&apos;');
 }
 
+type ArticleItem = {
+  slug: string;
+  created_at: string;
+  updated_at?: string | null;
+};
+
 export async function GET() {
   const siteUrl = getSiteBaseUrl();
 
   try {
-    const all: Array<{
-      slug: string;
-      updated_at?: string;
-      created_at: string;
-    }> = [];
+    const all: ArticleItem[] = [];
     let page = 1;
     let latestUpdateISO: string | undefined;
-    let total: number | undefined; // возьмем из ответа, если есть
-    let pageSize = PER_PAGE;       // актуальный размер страницы
+    let total: number | undefined;
+    let pageSize = PER_PAGE;
 
-    // мягкий предохранитель от бесконечного цикла
+    // Paginate through all articles to collect created/updated timestamps
     for (let safety = 0; safety < 400; safety++) {
-      const data = await getArticles({ page, per_page: PER_PAGE }, { revalidate });
+      const data: any = await getArticles(
+        { page, per_page: PER_PAGE },
+        { revalidate },
+      );
 
-      // Забираем фактический per_page и total, если клиент/бек их отдает
-      const maybePerPage = (data as any)?.per_page;
-      const maybeTotal   = (data as any)?.total;
+      const maybePerPage = data?.per_page;
+      const maybeTotal = data?.total;
 
-      if (typeof maybePerPage === 'number' && Number.isFinite(maybePerPage) && maybePerPage > 0) {
+      if (
+        typeof maybePerPage === 'number' &&
+        Number.isFinite(maybePerPage) &&
+        maybePerPage > 0
+      ) {
         pageSize = maybePerPage;
       }
-      if (typeof maybeTotal === 'number' && Number.isFinite(maybeTotal) && maybeTotal >= 0) {
+      if (
+        typeof maybeTotal === 'number' &&
+        Number.isFinite(maybeTotal) &&
+        maybeTotal >= 0
+      ) {
         total = maybeTotal;
       }
 
-      const items = Array.isArray(data.items) ? data.items : [];
+      const items: ArticleItem[] = Array.isArray(data.items) ? data.items : [];
       if (items.length === 0) break;
 
-      // собираем все статьи и вычисляем самый свежий lastmod
+      // Track latest updated_at/created_at across all posts
       for (const item of items) {
         const ts = item.updated_at || item.created_at;
         if (ts && (!latestUpdateISO || new Date(ts) > new Date(latestUpdateISO))) {
           latestUpdateISO = ts;
         }
       }
+
       all.push(...items);
 
-      // два независимых стоп-сигнала:
-      // 1) пришла неполная страница
       if (items.length < pageSize) break;
-      // 2) мы уже покрыли total
       if (typeof total === 'number' && all.length >= total) break;
 
       page += 1;
@@ -69,21 +79,22 @@ export async function GET() {
     const urls = [
       {
         loc: `${siteUrl}/`,
-        changefreq: 'daily',
-        priority: '1.0',
+        changefreq: 'daily' as const,
+        priority: '1.0' as const,
         lastmod: lastmodForRoot,
       },
       {
         loc: `${siteUrl}/artykuly`,
-        changefreq: 'daily',
-        priority: '0.9',
+        changefreq: 'daily' as const,
+        priority: '0.9' as const,
         lastmod: lastmodForRoot,
       },
+      // One entry per article – lastmod prefers updated_at over created_at
       ...all.map((item) => ({
         loc: `${siteUrl}/artykuly/${item.slug}`,
         lastmod: item.updated_at || item.created_at,
         changefreq: 'weekly' as const,
-        priority: '0.8',
+        priority: '0.8' as const,
       })),
     ];
 
@@ -91,10 +102,26 @@ export async function GET() {
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${urls
   .map((entry) => {
-    const parts = [`  <url>`, `    <loc>${escapeXml(entry.loc)}</loc>`];
-    if (entry.lastmod) parts.push(`    <lastmod>${new Date(entry.lastmod).toISOString()}</lastmod>`);
-    if ('changefreq' in entry && entry.changefreq) parts.push(`    <changefreq>${entry.changefreq}</changefreq>`);
-    if ('priority' in entry && entry.priority) parts.push(`    <priority>${entry.priority}</priority>`);
+    const parts = [
+      `  <url>`,
+      `    <loc>${escapeXml(entry.loc)}</loc>`,
+    ];
+
+    if (entry.lastmod) {
+      // Always output ISO string based on updated_at/created_at
+      parts.push(
+        `    <lastmod>${new Date(entry.lastmod).toISOString()}</lastmod>`,
+      );
+    }
+
+    if ('changefreq' in entry && entry.changefreq) {
+      parts.push(`    <changefreq>${entry.changefreq}</changefreq>`);
+    }
+
+    if ('priority' in entry && entry.priority) {
+      parts.push(`    <priority>${entry.priority}</priority>`);
+    }
+
     parts.push('  </url>');
     return parts.join('\n');
   })
@@ -108,7 +135,7 @@ ${urls
       },
     });
   } catch {
-    // fail-safe: отдадим минимальный sitemap, чтобы сайт и деплой не падали
+    // Fallback sitemap if API fails
     const now = new Date().toISOString();
     const fallback = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -125,6 +152,7 @@ ${urls
     <priority>0.9</priority>
   </url>
 </urlset>`;
+
     return new NextResponse(fallback, {
       headers: {
         'Content-Type': 'application/xml; charset=utf-8',
