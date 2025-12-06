@@ -121,10 +121,36 @@ const citationValueSchema = z
     } satisfies ArticleCitation;
   });
 
-const faqItemSchema = z.object({
-  question: z.string(),
-  answer: z.string()
-});
+export type ArticleFaqItem = {
+  question: string;
+  answer: string;
+};
+
+const faqItemSchema = z
+  .object({
+    question: z.string().optional(),
+    q: z.string().optional(),
+    answer: z.string().optional(),
+    a: z.string().optional(),
+    answer_html: z.string().optional()
+  })
+  .transform((value) => {
+    const question = (value.question ?? value.q ?? '').trim();
+    const answer = (value.answer ?? value.a ?? value.answer_html ?? '').trim();
+
+    return { question, answer } satisfies ArticleFaqItem;
+  })
+  .refine((item) => item.question.length > 0 && item.answer.length > 0, {
+    message: 'FAQ item must include question and answer'
+  });
+
+const faqListSchema = z
+  .union([z.array(faqItemSchema), z.record(faqItemSchema)])
+  .default([])
+  .transform((value) => {
+    const items = Array.isArray(value) ? value : Object.values(value);
+    return items.filter((item) => item.question && item.answer);
+  });
 
 const articleSectionSchema = z.object({
   title: z.string(),
@@ -149,10 +175,24 @@ export const articleDocumentSchema = z.object({
     sections: z.array(articleSectionSchema).min(1),
     citations: z.array(citationValueSchema).default([])
   }),
-  aeo: z.object({
-    geo_focus: z.array(z.string()).default([]),
-    faq: z.array(faqItemSchema).default([])
-  })
+  aeo: z
+    .object({
+      geo_focus: z.array(z.string()).default([]),
+      faq: faqListSchema
+    })
+    .default({ geo_focus: [], faq: [] }),
+  // Backwards/forwards compatibility: FAQ may come from a dedicated column instead of payload.aeo
+  faq: faqListSchema.optional()
+}).transform((value) => {
+  const normalizedFaq = value.faq && value.faq.length > 0 ? value.faq : value.aeo.faq;
+
+  return {
+    ...value,
+    aeo: {
+      ...value.aeo,
+      faq: normalizedFaq ?? []
+    }
+  };
 });
 
 type ArticleDocumentSchema = z.infer<typeof articleDocumentSchema>;
@@ -164,8 +204,6 @@ type ArticleBody = ArticleDocumentSchema['article'] & {
 export type ArticleDocument = Omit<ArticleDocumentSchema, 'article'> & {
   article: ArticleBody;
 };
-
-export type ArticleFaqItem = z.infer<typeof faqItemSchema>;
 
 export const articleDetailResponseSchema = articleDocumentSchema.extend({
   created_at: z.string().optional(),
