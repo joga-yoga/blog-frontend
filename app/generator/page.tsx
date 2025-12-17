@@ -33,9 +33,9 @@ export default async function ArticleGeneratorPage() {
           Zamów nowy artykuł
         </h1>
         <p className="max-w-2xl text-gray-600">
-          Wprowadź temat, opcjonalnie wybierz rubrykę i słowa kluczowe, a nasz
-          asystent przygotuje artykuł zgodny z aktualnym schematem
-          redakcyjnym.
+          Wprowadź temat albo link do YouTube, dodaj wskazówki i opcjonalną
+          rubrykę, a nasz asystent przygotuje artykuł zgodny z aktualnym
+          schematem redakcyjnym.
         </p>
       </header>
 
