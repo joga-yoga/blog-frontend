@@ -28,27 +28,45 @@ function formatDate(value: string | undefined): string | null {
   return new Intl.DateTimeFormat('pl-PL', { dateStyle: 'long' }).format(date);
 }
 
-function mapFaq(items: ArticleFaqItem[]): ArticleFaqItem[] {
-  return items.map((item) => ({
-    question: item.question.trim(),
-    answer: item.answer.trim()
-  }));
+function normalizeFaqForSchema(items: ArticleFaqItem[] | null | undefined): ArticleFaqItem[] {
+  if (!Array.isArray(items) || items.length === 0) {
+    return [];
+  }
+
+  const seenQuestions = new Set<string>();
+
+  return items
+    .map((item) => ({
+      question: item.question.replace(/\s+/g, ' ').trim(),
+      answer: item.answer.replace(/\s+/g, ' ').trim()
+    }))
+    .filter((item) => item.question.length > 0 && item.answer.length > 0)
+    .filter((item) => {
+      const normalizedQuestion = item.question.toLocaleLowerCase('pl-PL');
+      if (seenQuestions.has(normalizedQuestion)) {
+        return false;
+      }
+      seenQuestions.add(normalizedQuestion);
+      return true;
+    });
 }
 
 function buildArticleJsonLd(article: ArticleDetailResponse, canonicalUrl: string) {
   const createdAt = article.created_at ?? article.updated_at ?? new Date().toISOString();
   const updatedAt = article.updated_at ?? createdAt;
+  const description = article.seo.description ?? article.article.lead;
+  const keywords = article.taxonomy?.tags;
 
   return {
     '@context': 'https://schema.org',
     '@type': 'Article',
     headline: article.article.headline,
-    description: article.seo.description,
+    description,
     url: canonicalUrl,
     datePublished: new Date(createdAt).toISOString(),
     dateModified: new Date(updatedAt).toISOString(),
     inLanguage: article.locale,
-    keywords: article.taxonomy.tags,
+    keywords,
     mainEntityOfPage: {
       '@type': 'WebPage',
       '@id': canonicalUrl
@@ -57,7 +75,8 @@ function buildArticleJsonLd(article: ArticleDetailResponse, canonicalUrl: string
 }
 
 function buildFaqJsonLd(faq: ArticleFaqItem[]) {
-  if (faq.length === 0) {
+  // FAQ JSON-LD is emitted only when >=2 valid items.
+  if (faq.length < 2) {
     return null;
   }
 
@@ -89,32 +108,37 @@ export async function generateMetadata({ params }: GenerateMetadataProps): Promi
 
   try {
     const article = await getArticle(slug, { revalidate });
-    const canonicalUrl = assertValidCanonical(buildArticleCanonical(article.slug));
+    const canonicalSource = article.seo.canonical?.trim();
+    const canonicalUrl = assertValidCanonical(
+      canonicalSource && canonicalSource.length > 0 ? canonicalSource : buildArticleCanonical(article.slug)
+    );
     const createdAt = article.created_at ?? article.updated_at;
     const updatedAt = article.updated_at ?? article.created_at;
     const robotsValue = article.seo.robots?.toLowerCase() ?? '';
-    const robots = robotsValue
-      ? {
-          index: !robotsValue.includes('noindex'),
-          follow: !robotsValue.includes('nofollow')
-        }
-      : undefined;
+    const robots = {
+      index: !robotsValue.includes('noindex'),
+      follow: !robotsValue.includes('nofollow')
+    };
+
+    const title = article.seo.title ?? article.article.headline;
+    const description = article.seo.description ?? article.article.lead;
+    const tags = article.taxonomy?.tags ?? [];
 
     return {
-      title: article.seo.title ?? article.article.headline,
-      description: article.seo.description ?? article.article.lead,
+      title,
+      description,
       alternates: {
         canonical: canonicalUrl
       },
-      keywords: article.taxonomy.tags,
+      keywords: tags,
       openGraph: {
         type: 'article',
         locale: article.locale,
-        title: article.seo.title ?? article.article.headline,
-        description: article.seo.description ?? article.article.lead,
+        title,
+        description,
         url: canonicalUrl,
-        tags: article.taxonomy.tags,
-        section: article.taxonomy.section,
+        tags,
+        section: article.taxonomy?.section,
         publishedTime: createdAt,
         modifiedTime: updatedAt
       },
@@ -144,11 +168,16 @@ export default async function ArticlePage({ params }: PageProps) {
     throw error;
   }
 
-  const faqItems = mapFaq(article.aeo.faq);
-  const citations = normalizeCitations(article.article.citations);
+  const faqItems = normalizeFaqForSchema(article.aeo?.faq);
+  const citations = normalizeCitations(article.article.citations ?? []);
+  const taxonomy = article.taxonomy ?? { section: '', categories: [], tags: [] };
+  const articleSections = Array.isArray(article.article.sections) ? article.article.sections : [];
   const createdAt = formatDate(article.created_at ?? article.updated_at ?? undefined);
   const updatedAt = formatDate(article.updated_at ?? article.created_at ?? undefined);
-  const canonicalUrl = assertValidCanonical(buildArticleCanonical(article.slug));
+  const canonicalSource = article.seo.canonical?.trim();
+  const canonicalUrl = assertValidCanonical(
+    canonicalSource && canonicalSource.length > 0 ? canonicalSource : buildArticleCanonical(article.slug)
+  );
 
   const articleJsonLd = buildArticleJsonLd(article, canonicalUrl);
   const faqJsonLd = buildFaqJsonLd(faqItems);
@@ -163,16 +192,16 @@ export default async function ArticlePage({ params }: PageProps) {
       ) : null}
 
       <header className="space-y-4">
-        <div className="text-sm font-semibold uppercase tracking-wide text-gray-500">{article.taxonomy.section}</div>
+        <div className="text-sm font-semibold uppercase tracking-wide text-gray-500">{taxonomy.section}</div>
         <h1 className="text-4xl font-bold text-slate-900 sm:text-5xl">{article.article.headline}</h1>
         {article.article.lead ? <p className="max-w-3xl text-lg text-gray-600">{article.article.lead}</p> : null}
         <div className="text-sm text-gray-500">
           {createdAt ? <>Opublikowano {createdAt}</> : null}
           {updatedAt ? <span className="ml-2">• Zaktualizowano {updatedAt}</span> : null}
         </div>
-        {article.taxonomy.tags.length > 0 ? (
+        {taxonomy.tags.length > 0 ? (
           <ul className="flex flex-wrap gap-2 text-sm text-blue-700">
-            {article.taxonomy.tags.map((tag) => (
+            {taxonomy.tags.map((tag) => (
               <li key={tag} className="rounded-full bg-blue-100 px-3 py-1">
                 <Link href={`/?q=${encodeURIComponent(tag)}`}>#{tag}</Link>
               </li>
@@ -182,7 +211,7 @@ export default async function ArticlePage({ params }: PageProps) {
       </header>
 
       <div className="space-y-10">
-        {article.article.sections.map((section, index) => (
+        {articleSections.map((section, index) => (
           <section key={`${index}-${section.title}`} className="space-y-4">
             <h2 className="text-2xl font-semibold text-slate-900">{section.title}</h2>
             <Markdown>{section.body}</Markdown>
@@ -239,11 +268,11 @@ export default async function ArticlePage({ params }: PageProps) {
 
       <footer className="border-t border-gray-200 pt-6 text-sm text-gray-500">
         <div>
-          Sekcja: <span className="font-medium text-slate-900">{article.taxonomy.section}</span>
+          Sekcja: <span className="font-medium text-slate-900">{taxonomy.section}</span>
         </div>
-        {article.taxonomy.categories.length > 0 ? (
+        {taxonomy.categories.length > 0 ? (
           <div className="mt-2 flex flex-wrap gap-2">
-            {article.taxonomy.categories.map((category) => (
+            {taxonomy.categories.map((category) => (
               <span key={category} className="rounded-full bg-gray-200 px-3 py-1 text-gray-700">
                 {category}
               </span>
