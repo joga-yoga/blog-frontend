@@ -4,8 +4,9 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { Markdown } from '@/components/Markdown';
 import { getArticle, NotFoundError } from '@/lib/api/client';
-import type { ArticleCitation, ArticleDetailResponse, ArticleFaqItem } from '@/lib/api/types';
+import type { ArticleDetailResponse, ArticleFaqItem } from '@/lib/api/types';
 import { assertValidCanonical, buildArticleCanonical } from '@/lib/site';
+import { parseReadAlsoItems, ReadAlsoSection } from '@/components/ReadAlsoSection';
 
 export const revalidate = 0; // TODO: Restore incremental static regeneration once canonical changes are fully deployed.
 
@@ -94,13 +95,15 @@ function buildFaqJsonLd(faq: ArticleFaqItem[]) {
   };
 }
 
-function normalizeCitations(citations: ArticleCitation[]): ArticleCitation[] {
-  return citations
-    .map((citation) => ({
-      url: citation.url?.trim(),
-      label: citation.label.trim()
-    }))
-    .filter((item) => item.label.length > 0);
+const READ_ALSO_TITLE_VARIANTS = ['źródła', 'zrodla'];
+
+function isReadAlsoSection(title: string | null | undefined): boolean {
+  if (!title) {
+    return false;
+  }
+
+  const normalizedTitle = title.trim().toLocaleLowerCase('pl-PL');
+  return READ_ALSO_TITLE_VARIANTS.includes(normalizedTitle);
 }
 
 export async function generateMetadata({ params }: GenerateMetadataProps): Promise<Metadata> {
@@ -169,9 +172,13 @@ export default async function ArticlePage({ params }: PageProps) {
   }
 
   const faqItems = normalizeFaqForSchema(article.aeo?.faq);
-  const citations = normalizeCitations(article.article.citations ?? []);
   const taxonomy = article.taxonomy ?? { section: '', categories: [], tags: [] };
   const articleSections = Array.isArray(article.article.sections) ? article.article.sections : [];
+  const readAlsoSection = articleSections.find((section) => isReadAlsoSection(section.title));
+  const readAlsoItems = readAlsoSection ? parseReadAlsoItems(readAlsoSection.body ?? '') : [];
+  const contentSections = readAlsoSection
+    ? articleSections.filter((section) => section !== readAlsoSection)
+    : articleSections;
   const createdAt = formatDate(article.created_at ?? article.updated_at ?? undefined);
   const updatedAt = formatDate(article.updated_at ?? article.created_at ?? undefined);
   const canonicalSource = article.seo.canonical?.trim();
@@ -211,7 +218,7 @@ export default async function ArticlePage({ params }: PageProps) {
       </header>
 
       <div className="space-y-10">
-        {articleSections.map((section, index) => (
+        {contentSections.map((section, index) => (
           <section key={`${index}-${section.title}`} className="space-y-4">
             <h2 className="text-2xl font-semibold text-slate-900">{section.title}</h2>
             <Markdown>{section.body}</Markdown>
@@ -237,34 +244,7 @@ export default async function ArticlePage({ params }: PageProps) {
         </section>
       ) : null}
 
-      {citations.length > 0 ? (
-        <section aria-labelledby="citations-heading" className="rounded-lg border border-gray-200 bg-white p-6">
-          <h2 id="citations-heading" className="text-2xl font-semibold text-slate-900">
-            Źródła
-          </h2>
-          <ul className="mt-4 space-y-4">
-            {citations.map((citation, index) => {
-              const isExternal = citation.url?.startsWith('http');
-              return (
-                <li key={`${citation.label}-${index}`} className="space-y-1">
-                  {citation.url ? (
-                    <Link
-                      href={citation.url}
-                      className="text-base font-medium text-blue-700"
-                      target={isExternal ? '_blank' : undefined}
-                      rel={isExternal ? 'noreferrer' : undefined}
-                    >
-                      {citation.label}
-                    </Link>
-                  ) : (
-                    <p className="text-base text-gray-700">{citation.label}</p>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </section>
-      ) : null}
+      <ReadAlsoSection items={readAlsoItems} />
 
       <footer className="border-t border-gray-200 pt-6 text-sm text-gray-500">
         <div>
