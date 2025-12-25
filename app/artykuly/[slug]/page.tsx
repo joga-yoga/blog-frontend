@@ -246,7 +246,7 @@ export default async function ArticlePage({ params }: PageProps) {
 
       <ReadAlsoSection items={readAlsoItems} />
 
-      <footer className="border-t border-gray-200 pt-6 text-sm text-gray-500">
+      <footer className="border-t border-gray-50 pt-6 text-sm text-gray-500">
         <div>
           Sekcja: <span className="font-medium text-slate-900">{taxonomy.section}</span>
         </div>
