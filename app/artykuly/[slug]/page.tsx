@@ -3,11 +3,12 @@ import Script from 'next/script';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { Markdown } from '@/components/Markdown';
-import { getArticle, NotFoundError } from '@/lib/api/client';
+import { getArticle, getArticles, MAX_PER_PAGE, NotFoundError } from '@/lib/api/client';
 import type { ArticleDetailResponse, ArticleFaqItem } from '@/lib/api/types';
 import { assertValidCanonical, buildArticleCanonical } from '@/lib/site';
 import { ReadAlsoSection } from '@/components/ReadAlsoSection';
-import { resolveArticleReferences } from '@/lib/article-references';
+import { resolveArticleReferences, type InternalRecommendation } from '@/lib/article-references';
+import { extractExternalCitations } from '@/lib/citations';
 
 export const revalidate = 0; // TODO: Restore incremental static regeneration once canonical changes are fully deployed.
 
@@ -19,6 +20,11 @@ type PageProps = {
 
 type GenerateMetadataProps = {
   params: PageProps['params'];
+};
+
+type FallbackRecommendationsInput = {
+  currentSlug: string;
+  currentSection?: string | null;
 };
 
 function formatDate(value: string | undefined): string | null {
@@ -96,6 +102,44 @@ function buildFaqJsonLd(faq: ArticleFaqItem[]) {
   };
 }
 
+async function buildFallbackRecommendations({ currentSlug, currentSection }: FallbackRecommendationsInput): Promise<InternalRecommendation[]> {
+  const list = await getArticles({ per_page: MAX_PER_PAGE }, { revalidate });
+  const candidates = list.items.filter((item) => item.slug !== currentSlug);
+  const sameSection = candidates.filter((item) => item.section && item.section === currentSection);
+  const otherSections = candidates.filter((item) => !currentSection || item.section !== currentSection);
+
+  const selected = new Map<string, (typeof candidates)[number]>();
+
+  for (const item of sameSection) {
+    if (selected.size >= 2) break;
+    selected.set(item.slug, item);
+  }
+
+  if (selected.size < 3 && otherSections.length > 0) {
+    const shuffled = [...otherSections].sort(() => Math.random() - 0.5);
+    for (const item of shuffled) {
+      if (selected.size >= 3) break;
+      selected.set(item.slug, item);
+    }
+  }
+
+  if (selected.size < 3) {
+    for (const item of candidates) {
+      if (selected.size >= 3) break;
+      if (!selected.has(item.slug)) {
+        selected.set(item.slug, item);
+      }
+    }
+  }
+
+  return Array.from(selected.values()).map((item) => ({
+    slug: item.slug,
+    title: item.title,
+    lead: item.lead ?? undefined,
+    section: item.section ?? undefined
+  }));
+}
+
 export async function generateMetadata({ params }: GenerateMetadataProps): Promise<Metadata> {
   const { slug } = await params;
 
@@ -164,12 +208,17 @@ export default async function ArticlePage({ params }: PageProps) {
   const faqItems = normalizeFaqForSchema(article.aeo?.faq);
   const taxonomy = article.taxonomy ?? { section: '', categories: [], tags: [] };
   const articleSections = Array.isArray(article.article.sections) ? article.article.sections : [];
-  const { externalCitations, internalRecommendations, consumedSectionIndexes } = resolveArticleReferences(article);
-  const readAlsoItems = internalRecommendations.map((item) => ({
+  const { internalRecommendations, consumedSectionIndexes } = resolveArticleReferences(article);
+  const resolvedRecommendations =
+    internalRecommendations.length > 0
+      ? internalRecommendations
+      : await buildFallbackRecommendations({ currentSlug: article.slug, currentSection: taxonomy.section });
+  const readAlsoItems = resolvedRecommendations.map((item) => ({
     title: item.title,
     href: `/artykuly/${item.slug}`,
     snippet: item.lead ?? item.section ?? ''
   }));
+  const { externalCitations } = extractExternalCitations(article);
   const contentSections = articleSections.filter((_, index) => !consumedSectionIndexes.has(index));
   const createdAt = formatDate(article.created_at ?? article.updated_at ?? undefined);
   const updatedAt = formatDate(article.updated_at ?? article.created_at ?? undefined);
@@ -244,20 +293,13 @@ export default async function ArticlePage({ params }: PageProps) {
             Źródła
           </h2>
           <ul className="list-disc space-y-2 pl-5 text-base text-blue-800">
-            {externalCitations.map((citation, index) => {
-              const key = citation.url ?? citation.label ?? `citation-${index}`;
-              return (
-                <li key={key} className="break-words">
-                  {citation.url ? (
-                    <a href={citation.url} className="hover:underline" target="_blank" rel="noreferrer">
-                      {citation.label ?? citation.url}
-                    </a>
-                  ) : (
-                    <span>{citation.label}</span>
-                  )}
-                </li>
-              );
-            })}
+            {externalCitations.map((citation) => (
+              <li key={citation.url} className="break-words">
+                <a href={citation.url} className="hover:underline" target="_blank" rel="noreferrer">
+                  {citation.label}
+                </a>
+              </li>
+            ))}
           </ul>
         </section>
       ) : null}
