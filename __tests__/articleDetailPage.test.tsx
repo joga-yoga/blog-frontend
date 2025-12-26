@@ -33,7 +33,7 @@ it('renders article sections, FAQ and citations', async () => {
       title: 'Transformacja energetyczna',
       description: 'Opis SEO',
       slug: 'transformacja-energetyczna',
-      canonical: 'https://example.com/artykuly/transformacja-energetyczna',
+      canonical: 'https://wiedza.joga.yoga/artykuly/transformacja-energetyczna',
       robots: 'index,follow'
     },
     article: {
