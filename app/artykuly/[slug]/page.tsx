@@ -6,7 +6,8 @@ import { Markdown } from '@/components/Markdown';
 import { getArticle, NotFoundError } from '@/lib/api/client';
 import type { ArticleDetailResponse, ArticleFaqItem } from '@/lib/api/types';
 import { assertValidCanonical, buildArticleCanonical } from '@/lib/site';
-import { parseReadAlsoItems, ReadAlsoSection } from '@/components/ReadAlsoSection';
+import { ReadAlsoSection } from '@/components/ReadAlsoSection';
+import { resolveArticleReferences } from '@/lib/article-references';
 
 export const revalidate = 0; // TODO: Restore incremental static regeneration once canonical changes are fully deployed.
 
@@ -95,17 +96,6 @@ function buildFaqJsonLd(faq: ArticleFaqItem[]) {
   };
 }
 
-const READ_ALSO_TITLE_VARIANTS = ['źródła', 'zrodla'];
-
-function isReadAlsoSection(title: string | null | undefined): boolean {
-  if (!title) {
-    return false;
-  }
-
-  const normalizedTitle = title.trim().toLocaleLowerCase('pl-PL');
-  return READ_ALSO_TITLE_VARIANTS.includes(normalizedTitle);
-}
-
 export async function generateMetadata({ params }: GenerateMetadataProps): Promise<Metadata> {
   const { slug } = await params;
 
@@ -174,11 +164,13 @@ export default async function ArticlePage({ params }: PageProps) {
   const faqItems = normalizeFaqForSchema(article.aeo?.faq);
   const taxonomy = article.taxonomy ?? { section: '', categories: [], tags: [] };
   const articleSections = Array.isArray(article.article.sections) ? article.article.sections : [];
-  const readAlsoSection = articleSections.find((section) => isReadAlsoSection(section.title));
-  const readAlsoItems = readAlsoSection ? parseReadAlsoItems(readAlsoSection.body ?? '') : [];
-  const contentSections = readAlsoSection
-    ? articleSections.filter((section) => section !== readAlsoSection)
-    : articleSections;
+  const { externalCitations, internalRecommendations, consumedSectionIndexes } = resolveArticleReferences(article);
+  const readAlsoItems = internalRecommendations.map((item) => ({
+    title: item.title,
+    href: `/artykuly/${item.slug}`,
+    snippet: item.lead ?? item.section ?? ''
+  }));
+  const contentSections = articleSections.filter((_, index) => !consumedSectionIndexes.has(index));
   const createdAt = formatDate(article.created_at ?? article.updated_at ?? undefined);
   const updatedAt = formatDate(article.updated_at ?? article.created_at ?? undefined);
   const canonicalSource = article.seo.canonical?.trim();
@@ -245,6 +237,30 @@ export default async function ArticlePage({ params }: PageProps) {
       ) : null}
 
       <ReadAlsoSection items={readAlsoItems} />
+
+      {externalCitations.length > 0 ? (
+        <section aria-labelledby="sources-heading" className="space-y-3">
+          <h2 id="sources-heading" className="text-2xl font-semibold text-slate-900">
+            Źródła
+          </h2>
+          <ul className="list-disc space-y-2 pl-5 text-base text-blue-800">
+            {externalCitations.map((citation, index) => {
+              const key = citation.url ?? citation.label ?? `citation-${index}`;
+              return (
+                <li key={key} className="break-words">
+                  {citation.url ? (
+                    <a href={citation.url} className="hover:underline" target="_blank" rel="noreferrer">
+                      {citation.label ?? citation.url}
+                    </a>
+                  ) : (
+                    <span>{citation.label}</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
 
       <footer className="border-t border-gray-50 pt-6 text-sm text-gray-500">
         <div>
