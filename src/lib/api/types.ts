@@ -131,7 +131,8 @@ const articleSectionSchema = z.object({
   body: z.string()
 });
 
-export const articleDocumentSchema = z.object({
+export const articleDocumentSchema = z
+  .object({
   topic: z.string(),
   slug: z.string(),
   locale: z.string().default('pl-PL'),
@@ -153,7 +154,8 @@ export const articleDocumentSchema = z.object({
     geo_focus: z.array(z.string()).default([]),
     faq: z.array(faqItemSchema).default([])
   })
-});
+  })
+  .passthrough();
 
 type ArticleDocumentSchema = z.infer<typeof articleDocumentSchema>;
 
@@ -167,10 +169,12 @@ export type ArticleDocument = Omit<ArticleDocumentSchema, 'article'> & {
 
 export type ArticleFaqItem = z.infer<typeof faqItemSchema>;
 
-export const articleDetailResponseSchema = articleDocumentSchema.extend({
-  created_at: z.string().optional(),
-  updated_at: z.string().optional()
-});
+export const articleDetailResponseSchema = articleDocumentSchema
+  .extend({
+    created_at: z.string().optional(),
+    updated_at: z.string().optional()
+  })
+  .passthrough();
 
 type ArticleDetailResponseSchema = z.infer<typeof articleDetailResponseSchema>;
 
