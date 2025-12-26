@@ -40,6 +40,13 @@ npm run build
 npm run start
 ```
 
+### Szybka checklista weryfikacyjna
+
+- Uruchom `npm run build`, aby upewnić się, że konfiguracja przechodzi weryfikację produkcyjną.
+- Otwórz starszy artykuł i potwierdź, że sekcja „Źródła” pokazuje zewnętrzne linki.
+- Sprawdź nowszy artykuł: po treści powinien pojawić się FAQ, a następnie karty „Przeczytaj również”.
+- Gdy artykuł ma zarówno źródła, jak i polecenia wewnętrzne, upewnij się, że obie sekcje są widoczne bez duplikatów.
+
 ## Stylowanie
 
 Projekt korzysta z Tailwind CSS oraz wtyczki `@tailwindcss/typography`.

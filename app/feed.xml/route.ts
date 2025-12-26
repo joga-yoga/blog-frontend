@@ -12,7 +12,15 @@ function escapeXml(value: string): string {
 export async function GET() {
   const siteUrl = getSiteBaseUrl();
   const feedUrl = `${siteUrl}/feed.xml`;
-  const articles = await getArticles({ page: 1, per_page: FEED_LIMIT }, { revalidate });
+  let articles;
+
+  try {
+    articles = await getArticles({ page: 1, per_page: FEED_LIMIT }, { revalidate });
+  } catch (error) {
+    // eslint-disable-next-line no-console
+    console.warn('[feed.xml] Falling back to empty feed because articles could not be fetched.', error);
+    articles = { meta: { page: 1, per_page: FEED_LIMIT, total_items: 0, total_pages: 1 }, items: [] };
+  }
 
   const updated = articles.items[0]?.updated_at ?? new Date().toISOString();
 

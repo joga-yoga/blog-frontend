@@ -43,11 +43,11 @@ const toArray = <T>(value: ArrayLikeValue<T>): T[] => {
   }
 
   if (value && typeof value === 'object') {
-    if (Array.isArray(value.items)) {
-      return value.items as T[];
+    if ('items' in value && Array.isArray((value as { items?: T[] }).items)) {
+      return (value as { items: T[] }).items;
     }
 
-    if (Array.isArray((value as { data?: unknown }).data)) {
+    if ('data' in value && Array.isArray((value as { data?: unknown }).data)) {
       return (value as { data: T[] }).data;
     }
   }

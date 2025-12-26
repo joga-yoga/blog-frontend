@@ -4,7 +4,12 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { Markdown } from '@/components/Markdown';
 import { getArticle, getArticles, MAX_PER_PAGE, NotFoundError } from '@/lib/api/client';
-import type { ArticleDetailResponse, ArticleFaqItem } from '@/lib/api/types';
+import {
+  articleDetailResponseSchema,
+  type ArticleCitation,
+  type ArticleDetailResponse,
+  type ArticleFaqItem
+} from '@/lib/api/types';
 import { assertValidCanonical, buildArticleCanonical } from '@/lib/site';
 import { ReadAlsoSection } from '@/components/ReadAlsoSection';
 import { resolveArticleReferences, type InternalRecommendation } from '@/lib/article-references';
@@ -26,6 +31,70 @@ type FallbackRecommendationsInput = {
   currentSlug: string;
   currentSection?: string | null;
 };
+
+type ArticleSeo = {
+  title?: string | null;
+  description?: string | null;
+  canonical?: string | null;
+  robots?: string | null;
+  slug?: string;
+};
+
+type ArticleTaxonomy = {
+  section?: string | null;
+  categories: string[];
+  tags: string[];
+};
+
+type ArticleBody = {
+  headline: string;
+  lead?: string | null;
+  sections: Array<{ title: string; body: string }>;
+  citations?: ArticleCitation[];
+};
+
+type ArticleForRendering = ArticleDetailResponse & {
+  seo: ArticleSeo;
+  taxonomy: ArticleTaxonomy;
+  article: ArticleBody;
+  aeo: { faq: ArticleFaqItem[]; geo_focus: string[] };
+  created_at?: string | null;
+  updated_at?: string | null;
+  slug: string;
+  locale: string;
+};
+
+function validateArticlePayload(payload: unknown, slug: string): ArticleForRendering {
+  const parsed = articleDetailResponseSchema.safeParse(payload);
+  if (!parsed.success) {
+    throw new Error(`Invalid article payload for slug "${slug}"`, { cause: parsed.error });
+  }
+
+  const base = parsed.data;
+
+  return {
+    ...base,
+    seo: { ...base.seo },
+    taxonomy: {
+      section: base.taxonomy?.section ?? null,
+      categories: base.taxonomy?.categories ?? [],
+      tags: base.taxonomy?.tags ?? []
+    },
+    article: {
+      ...base.article,
+      lead: base.article.lead ?? null,
+      citations: base.article.citations ?? []
+    },
+    aeo: {
+      geo_focus: base.aeo?.geo_focus ?? [],
+      faq: base.aeo?.faq ?? []
+    },
+    created_at: base.created_at ?? null,
+    updated_at: base.updated_at ?? null,
+    slug: base.slug,
+    locale: base.locale
+  } satisfies ArticleForRendering;
+}
 
 function formatDate(value: string | undefined): string | null {
   if (!value) return null;
@@ -59,7 +128,7 @@ function normalizeFaqForSchema(items: ArticleFaqItem[] | null | undefined): Arti
     });
 }
 
-function buildArticleJsonLd(article: ArticleDetailResponse, canonicalUrl: string) {
+function buildArticleJsonLd(article: ArticleForRendering, canonicalUrl: string) {
   const createdAt = article.created_at ?? article.updated_at ?? new Date().toISOString();
   const updatedAt = article.updated_at ?? createdAt;
   const description = article.seo.description ?? article.article.lead;
@@ -144,13 +213,13 @@ export async function generateMetadata({ params }: GenerateMetadataProps): Promi
   const { slug } = await params;
 
   try {
-    const article = await getArticle(slug, { revalidate });
+    const article = validateArticlePayload(await getArticle(slug, { revalidate }), slug);
     const canonicalSource = article.seo.canonical?.trim();
     const canonicalUrl = assertValidCanonical(
       canonicalSource && canonicalSource.length > 0 ? canonicalSource : buildArticleCanonical(article.slug)
     );
-    const createdAt = article.created_at ?? article.updated_at;
-    const updatedAt = article.updated_at ?? article.created_at;
+    const createdAt = article.created_at ?? article.updated_at ?? undefined;
+    const updatedAt = article.updated_at ?? article.created_at ?? undefined;
     const robotsValue = article.seo.robots?.toLowerCase() ?? '';
     const robots = {
       index: !robotsValue.includes('noindex'),
@@ -176,8 +245,8 @@ export async function generateMetadata({ params }: GenerateMetadataProps): Promi
         url: canonicalUrl,
         tags,
         section: article.taxonomy?.section,
-        publishedTime: createdAt,
-        modifiedTime: updatedAt
+        publishedTime: createdAt ?? undefined,
+        modifiedTime: updatedAt ?? undefined
       },
       robots
     } satisfies Metadata;
@@ -194,10 +263,10 @@ export async function generateMetadata({ params }: GenerateMetadataProps): Promi
 
 export default async function ArticlePage({ params }: PageProps) {
   const { slug } = await params;
-  let article: ArticleDetailResponse;
+  let articlePayload: ArticleDetailResponse;
 
   try {
-    article = await getArticle(slug, { revalidate });
+    articlePayload = await getArticle(slug, { revalidate });
   } catch (error) {
     if (error instanceof NotFoundError) {
       notFound();
@@ -205,20 +274,34 @@ export default async function ArticlePage({ params }: PageProps) {
     throw error;
   }
 
+  const article = validateArticlePayload(articlePayload, slug);
+
   const faqItems = normalizeFaqForSchema(article.aeo?.faq);
   const taxonomy = article.taxonomy ?? { section: '', categories: [], tags: [] };
   const articleSections = Array.isArray(article.article.sections) ? article.article.sections : [];
   const { internalRecommendations, consumedSectionIndexes } = resolveArticleReferences(article);
+  const { externalCitations, internalRecommendations: citationRecommendations } = extractExternalCitations(article);
+
+  const mergedRecommendations = [
+    ...citationRecommendations,
+    ...internalRecommendations
+  ].reduce<InternalRecommendation[]>((acc, recommendation) => {
+    if (acc.some((item) => item.slug === recommendation.slug)) {
+      return acc;
+    }
+    acc.push(recommendation);
+    return acc;
+  }, []);
+
   const resolvedRecommendations =
-    internalRecommendations.length > 0
-      ? internalRecommendations
+    mergedRecommendations.length > 0
+      ? mergedRecommendations
       : await buildFallbackRecommendations({ currentSlug: article.slug, currentSection: taxonomy.section });
   const readAlsoItems = resolvedRecommendations.map((item) => ({
     title: item.title,
     href: `/artykuly/${item.slug}`,
     snippet: item.lead ?? item.section ?? ''
   }));
-  const { externalCitations } = extractExternalCitations(article);
   const contentSections = articleSections.filter((_, index) => !consumedSectionIndexes.has(index));
   const createdAt = formatDate(article.created_at ?? article.updated_at ?? undefined);
   const updatedAt = formatDate(article.updated_at ?? article.created_at ?? undefined);
@@ -229,6 +312,7 @@ export default async function ArticlePage({ params }: PageProps) {
 
   const articleJsonLd = buildArticleJsonLd(article, canonicalUrl);
   const faqJsonLd = buildFaqJsonLd(faqItems);
+  const uniqueTags = Array.from(new Set(taxonomy.tags));
 
   return (
     <article className="space-y-10">
@@ -247,10 +331,10 @@ export default async function ArticlePage({ params }: PageProps) {
           {createdAt ? <>Opublikowano {createdAt}</> : null}
           {updatedAt ? <span className="ml-2">• Zaktualizowano {updatedAt}</span> : null}
         </div>
-        {taxonomy.tags.length > 0 ? (
+        {uniqueTags.length > 0 ? (
           <ul className="flex flex-wrap gap-2 text-sm text-blue-700">
-            {taxonomy.tags.map((tag) => (
-              <li key={tag} className="rounded-full bg-blue-100 px-3 py-1">
+            {uniqueTags.map((tag, index) => (
+              <li key={`${tag}-${index}`} className="rounded-full bg-blue-100 px-3 py-1">
                 <Link href={`/?q=${encodeURIComponent(tag)}`}>#{tag}</Link>
               </li>
             ))}
@@ -285,8 +369,6 @@ export default async function ArticlePage({ params }: PageProps) {
         </section>
       ) : null}
 
-      <ReadAlsoSection items={readAlsoItems} />
-
       {externalCitations.length > 0 ? (
         <section aria-labelledby="sources-heading" className="space-y-3">
           <h2 id="sources-heading" className="text-2xl font-semibold text-slate-900">
@@ -303,6 +385,8 @@ export default async function ArticlePage({ params }: PageProps) {
           </ul>
         </section>
       ) : null}
+
+      <ReadAlsoSection items={readAlsoItems} />
 
       <footer className="border-t border-gray-50 pt-6 text-sm text-gray-500">
         <div>
