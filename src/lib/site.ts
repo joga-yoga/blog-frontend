@@ -60,7 +60,11 @@ function resolveSiteConfig(): SiteConfig {
   // In production we still require https, always.
   if (!isDev) {
     if (parsed.protocol !== 'https:') {
-      throw new Error('NEXT_PUBLIC_SITE_URL must use the https protocol.');
+      if (isLocal) {
+        parsed = new URL(DEFAULT_SITE_URL);
+      } else {
+        throw new Error('NEXT_PUBLIC_SITE_URL must use the https protocol.');
+      }
     }
   } else {
     // In dev we allow http IF it's a local host.

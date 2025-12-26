@@ -1,8 +1,15 @@
 import type { ArticleCitation } from '@/lib/api/types';
+import type { InternalRecommendation } from '@/lib/article-references';
+import { getSiteBaseUrl } from '@/lib/site';
 
 type ArrayLikeValue<T> = T | T[] | { data?: T[]; items?: T[] } | null | undefined;
 
 type ExtractedCitation = { url: string; label: string };
+
+type ExtractCitationsResult = {
+  externalCitations: ExtractedCitation[];
+  internalRecommendations: InternalRecommendation[];
+};
 
 const toArray = <T>(value: ArrayLikeValue<T>): T[] => {
   if (Array.isArray(value)) {
@@ -48,9 +55,21 @@ const normalizeCitation = (entry: unknown): ExtractedCitation | null => {
   return null;
 };
 
-const isHttpUrl = (value: string): boolean => /^https?:\/\//i.test(value);
+const resolveInternalSlug = (value: string): string | null => {
+  try {
+    const base = getSiteBaseUrl();
+    const parsed = new URL(value, base);
+    const segments = parsed.pathname.split('/').filter(Boolean);
+    const slug = segments.pop();
+    return slug ?? null;
+  } catch {
+    return null;
+  }
+};
 
-export function extractExternalCitations(payload: unknown): { externalCitations: ExtractedCitation[] } {
+const isHttpUrl = (value: string): boolean => /^https?:/i.test(value);
+
+export function extractExternalCitations(payload: unknown): ExtractCitationsResult {
   const candidates: Array<ArrayLikeValue<unknown>> = [
     (payload as { citations?: unknown })?.citations,
     (payload as { article?: { citations?: unknown } })?.article?.citations,
@@ -63,28 +82,67 @@ export function extractExternalCitations(payload: unknown): { externalCitations:
 
   const collected = candidates.flatMap((value) => toArray(value).map((entry) => normalizeCitation(entry))).filter(Boolean);
 
-  const uniqueByUrl = new Map<string, ExtractedCitation>();
+  const siteHostname = (() => {
+    try {
+      return new URL(getSiteBaseUrl()).hostname;
+    } catch {
+      return null;
+    }
+  })();
+
+  const externalByUrl = new Map<string, ExtractedCitation>();
+  const internalBySlug = new Map<string, InternalRecommendation>();
 
   collected.forEach((entry) => {
     if (!entry) return;
-    if (!isHttpUrl(entry.url)) return;
 
     const normalizedUrl = entry.url.trim();
-    if (!uniqueByUrl.has(normalizedUrl)) {
-      const label = entry.label?.trim();
+    const label = entry.label?.trim();
+
+    if (!normalizedUrl) return;
+
+    const slug = resolveInternalSlug(normalizedUrl);
+    const parsedHostname = (() => {
+      try {
+        return new URL(normalizedUrl, getSiteBaseUrl()).hostname;
+      } catch {
+        return null;
+      }
+    })();
+
+    const isInternal = slug && siteHostname && parsedHostname === siteHostname;
+
+    if (isInternal && slug) {
+      if (!internalBySlug.has(slug)) {
+        internalBySlug.set(slug, {
+          slug,
+          title: label && label.length > 0 ? label : slug,
+          lead: undefined,
+          section: undefined
+        });
+      }
+      return;
+    }
+
+    if (!isHttpUrl(normalizedUrl)) return;
+
+    if (!externalByUrl.has(normalizedUrl)) {
       if (label && label.length > 0 && label !== normalizedUrl) {
-        uniqueByUrl.set(normalizedUrl, { url: normalizedUrl, label });
+        externalByUrl.set(normalizedUrl, { url: normalizedUrl, label });
         return;
       }
 
       try {
         const hostname = new URL(normalizedUrl).hostname;
-        uniqueByUrl.set(normalizedUrl, { url: normalizedUrl, label: hostname });
+        externalByUrl.set(normalizedUrl, { url: normalizedUrl, label: hostname });
       } catch {
-        uniqueByUrl.set(normalizedUrl, { url: normalizedUrl, label: normalizedUrl });
+        externalByUrl.set(normalizedUrl, { url: normalizedUrl, label: normalizedUrl });
       }
     }
   });
 
-  return { externalCitations: Array.from(uniqueByUrl.values()) };
+  return {
+    externalCitations: Array.from(externalByUrl.values()),
+    internalRecommendations: Array.from(internalBySlug.values())
+  };
 }
