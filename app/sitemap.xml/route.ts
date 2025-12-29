@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getArticles } from '@/lib/api/client';
 import { getSiteBaseUrl } from '@/lib/site';
 
-const PER_PAGE = 50;
+const PER_PAGE = 83;
 export const revalidate = 3600;
 
 function escapeXml(value: string): string {
